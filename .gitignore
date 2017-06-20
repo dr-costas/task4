@@ -54,7 +54,7 @@ pip-selfcheck.json
 
 ### Binary and test files
 *.wav
-*test*.*
+test_*.*
 
 # Icon must end with two \r
 Icon
@@ -237,6 +237,7 @@ nbdist/
 .idea/**/workspace.xml
 .idea/**/tasks.xml
 .idea/dictionaries
+.idea/*
 
 # Sensitive or high-churn files:
 .idea/**/dataSources/

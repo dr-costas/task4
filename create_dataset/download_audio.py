@@ -127,10 +127,14 @@ def download_audio(csv_file, time_stamp):
         fo.close()
 
 
+def main(arg):
+    ts = time.time()
+    time_stamp = datetime.datetime.fromtimestamp(ts).strftime('%Y_%m_%d_%H_%M_%S')
+    download_audio(arg, time_stamp)
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print('takes arg1 as csv file to downloaded')
     else:
-        ts = time.time()
-        timestamp = datetime.datetime.fromtimestamp(ts).strftime('%Y_%m_%d_%H_%M_%S')
-        download_audio(sys.argv[1], timestamp)
+        main(sys.argv[1])

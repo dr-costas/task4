@@ -60,8 +60,6 @@ class STFTDataset(Dataset):
             for line_num, json_line in enumerate(json_line_file):
                 try:
                     spec = json.loads(json_line)
-                    if float(spec['duration']) > max_duration:
-                        continue
                     audio_paths.append(spec['key'])
                     targets.append(spec['labels'])
                 except Exception as e:

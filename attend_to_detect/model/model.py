@@ -1,8 +1,10 @@
+from __future__ import print_function
 import torch
 from torch import nn
 from torch.autograd import Variable
 
 from math import floor
+
 
 class RNNModelWithSkipConnections(nn.Module):
 
@@ -13,8 +15,9 @@ class RNNModelWithSkipConnections(nn.Module):
 
         pad_t = floor((context[1] - 1)/ 2)
 
-        self.input_layer = nn.Conv2d(1, n_filters,
-                kernel_size=context, stride=(2, 1), padding=(0, pad_t))
+        self.input_layer = nn.Conv2d(
+            1, n_filters,
+            kernel_size=context, stride=(2, 1), padding=(0, pad_t))
 
         self.rnn_in_size = n_filters * floor((n_input - context[0] + 1)/2 + 1)
 
@@ -34,16 +37,16 @@ class RNNModelWithSkipConnections(nn.Module):
         self.h_transitions2 = nn.Linear(n_hidden, n_hidden)
 
         self.h_transitions = [self.h_transitions0,
-                self.h_transitions1,
-                self.h_transitions2]
+                              self.h_transitions1,
+                              self.h_transitions2]
 
         self.out_transitions0 = nn.Linear(n_hidden, n_readouts)
         self.out_transitions1 = nn.Linear(n_hidden, n_readouts)
         self.out_transitions2 = nn.Linear(n_hidden, n_readouts)
 
         self.out_transitions = [self.out_transitions0,
-                self.out_transitions1,
-                self.out_transitions2]
+                                self.out_transitions1,
+                                self.out_transitions2]
 
         self.output_layer = nn.Linear(n_readouts, n_output)
 
@@ -104,7 +107,8 @@ class RNNModelWithSkipConnections(nn.Module):
 
     def init_hidden(self, batch_size):
         weight = next(self.parameters()).data
-        hidden = [Variable(weight.new(batch_size, self.n_hidden).zero_()) for k in range(self.n_layers)]
+        hidden = [Variable(weight.new(batch_size, self.n_hidden).zero_())
+                  for _ in range(self.n_layers)]
         return hidden
 
 
@@ -115,7 +119,7 @@ def train_fn(model, optimizer, criterion, batch):
     y = Variable(y.cuda(), requires_grad=False)
 
     mask = Variable(torch.ByteTensor(y.size()).fill_(1).cuda(),
-            requires_grad=False)
+                    requires_grad=False)
     for k, l in enumerate(lengths):
         mask[:l, k, :] = 0
 
@@ -142,7 +146,7 @@ def valid_fn(model, criterion, batch):
     y = Variable(y.cuda(), requires_grad=False)
 
     mask = Variable(torch.ByteTensor(y.size()).fill_(1).cuda(),
-            requires_grad=False)
+                    requires_grad=False)
     for k, l in enumerate(lengths):
         mask[:l, k, :] = 0
 

@@ -53,7 +53,7 @@ pip-selfcheck.json
 
 ### Binary and test files
 *.wav
-test_*.*
+test_*.py
 
 # Icon must end with two \r
 Icon

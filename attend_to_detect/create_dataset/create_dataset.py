@@ -143,7 +143,7 @@ def make_dicts_from_csvs(csv_file_names):
         for row in reader_2:
             start_time = round(float(row[1]))
             end_time = round(float(row[2]))
-            yt_id = ''.join(row[0].split('_')[:-2]).strip()
+            yt_id = '_'.join(row[0].split('_')[:-2]).strip()
             for s in row[3].split(','):
                 s_strip = s.strip()
                 if s_strip in alarm_classes:

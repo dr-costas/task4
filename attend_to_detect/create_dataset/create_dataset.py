@@ -13,20 +13,21 @@ __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 
-training_file = 'groundtruth_weak_label_training_set.csv'
-testing_file_weak_labels = 'groundtruth_weak_label_testing_set.csv'
-testing_file_strong_labels = 'groundtruth_strong_label_testing_set.csv'
+training_file = 'training_set_test.csv'
+testing_file_weak_labels = 'testing_set_test.csv'
+testing_file_strong_labels = 'groundtruth_strong_label_testing_set_test.csv'
 fuel_dataset_file = 'dcase_2017_task_4.hdf5'
-audio_files_dir = 'audio_files'
+audio_files_dir_training = 'audio_files_small_tests'
+audio_files_dir_testing = 'audio_files_testing'
 
 alarm_classes = [
     'Train horn',
-    'Truck horn',
+    'Air horn',
     'Car alarm',
     'Reversing beeps',
-    'Ambulance siren',
-    'Police siren',
-    'Fire truck siren',
+    'Ambulance (siren)',
+    'Police car (siren)',
+    'fire truck (siren)',
     'Civil defense siren',
     'Screaming'
 ]
@@ -35,7 +36,7 @@ vehicle_classes = [
     'Bicycle',
     'Skateboard',
     'Car',
-    'Car passing',
+    'Car passing by',
     'Bus',
     'Truck',
     'Motorcycle',
@@ -68,29 +69,81 @@ def extract_features(file_name, n_fft=1024, hop_length=512, n_mels=64):
     return np.concatenate((log_mel_band, delta_mels, delta_delta_mels)).T
 
 
-def make_dict_from_csv(csv_file_name):
+def make_dicts_from_csvs(csv_file_names):
     """
 
-    :param csv_file_name:
-    :type csv_file_name: str
-    :return:
-    :rtype: dict[str, dict[str, float|list[str]]]
+    :param csv_file_names: [training_csv, testing_weak_csv, testing_strong_csv]
+    :type csv_file_names: list[str]
+    :return: [training_set, testing_set]
+    :rtype: list[dict[str, dict[str, float|list[str]]]]
     """
-    to_return = {}
-    with open(csv_file_name) as f:
+    to_return_training = {}
+    with open(csv_file_names[0]) as f:
         reader = csv.reader(f)
 
         for row in reader:
-            to_return.update({
+            classes_alarm = []
+            classes_vehicle = []
+            for s in row[3].split(','):
+                s_strip = s.strip()
+                if s_strip in alarm_classes:
+                    classes_alarm.append(s_strip)
+                elif s_strip in vehicle_classes:
+                    classes_vehicle.append(s_strip)
+            to_return_training.update({
                 row[0].strip(): {
                     'start': float(row[1]),
                     'end': float(row[2]),
-                    'classes_alarm': [s.strip() for s in row[3].split(',') if s in alarm_classes],
-                    'classes_vehicle': [s.strip() for s in row[3].split(',') if s in vehicle_classes]
+                    'classes_alarm_weak': classes_alarm,
+                    'classes_vehicle_weak': classes_vehicle,
+                    'classes_alarm_strong_labels': [],
+                    'classes_alarm_strong_times': [],
+                    'classes_vehicle_strong_labels': [],
+                    'classes_vehicle_strong_times': []
                 }
             })
 
-    return to_return
+    to_return_testing = {}
+    with open(csv_file_names[1]) as f, open(csv_file_names[2]) as f_2:
+        reader = csv.reader(f)
+        reader_2 = csv.reader(f_2, delimiter='\t')
+
+        for row in reader:
+            classes_alarm = []
+            classes_vehicle = []
+            for s in row[3].split(','):
+                s_strip = s.strip()
+                if s_strip in alarm_classes:
+                    classes_alarm.append(s_strip)
+                elif s_strip in vehicle_classes:
+                    classes_vehicle.append(s_strip)
+            to_return_testing.update({
+                row[0].strip(): {
+                    'start': float(row[1]),
+                    'end': float(row[2]),
+                    'classes_alarm_weak': classes_alarm,
+                    'classes_vehicle_weak': classes_vehicle,
+                    'classes_alarm_strong_labels': [],
+                    'classes_alarm_strong_times': [],
+                    'classes_vehicle_strong_labels': [],
+                    'classes_vehicle_strong_times': []
+                }
+            })
+
+        for row in reader_2:
+            start_time = round(float(row[1]))
+            end_time = round(float(row[2]))
+            yt_id = ''.join(row[0].split('_')[:-2]).strip()
+            for s in row[3].split(','):
+                s_strip = s.strip()
+                if s_strip in alarm_classes:
+                    to_return_testing[yt_id]['classes_alarm_strong_labels'].append(s_strip)
+                    to_return_testing[yt_id]['classes_alarm_strong_times'].append([start_time, end_time])
+                elif s_strip in vehicle_classes:
+                    to_return_testing[yt_id]['classes_vehicle_strong_labels'].append(s_strip)
+                    to_return_testing[yt_id]['classes_vehicle_strong_times'].append([start_time, end_time])
+
+    return [to_return_training, to_return_testing]
 
 
 def get_yt_name(file_name):
@@ -104,57 +157,64 @@ def get_yt_name(file_name):
     return ''.join(os.path.split(file_name)[-1].split('_')[:-2])[1:]
 
 
-def process_data(audio_files, set_dict):
+def process_data(audio_files, sets_dict):
     """
 
-    :param audio_files:
-    :type audio_files: list[str]
-    :param set_dict:
-    :type set_dict: dict[str, dict[str, float|list[str]]]
+    :param audio_files: [training_set, testing_set]
+    :type audio_files: list[list[str]]
+    :param sets_dict: [training_set, testing_set]
+    :type sets_dict: list[dict[str, dict[str, float|list[str]]]]
     :return:
-    :rtype: list[dict[str, numpy.core.multiarray.ndarray]]
+    :rtype: (list[dict[str, numpy.core.multiarray.ndarray]], \
+            list[dict[str, numpy.core.multiarray.ndarray]])
     """
-    to_return = []
-    nb_classes_alarm = len(alarm_classes)
-    nb_classes_vehicle = len(vehicle_classes)
+    def process_set(set_files, inner_set_dict):
+        to_return_inner = []
+        for set_file in set_files:
+            features = extract_features(set_file).astype('float32')
+            yt_file = get_yt_name(set_file)
+            cl_a_w = inner_set_dict[yt_file]['classes_alarm_weak']
+            cl_a_s = inner_set_dict[yt_file]['classes_alarm_strong']
+            times_a_s = inner_set_dict[yt_file]['classes_alarm_strong_times']
+            cl_v_w = inner_set_dict[yt_file]['classes_vehicle_weak']
+            cl_v_s = inner_set_dict[yt_file]['classes_vehicle_strong']
+            times_v_s = inner_set_dict[yt_file]['classes_vehicle_strong_times']
 
-    for audio_file in audio_files:
-        features = extract_features(audio_file).astype('float32')
-        classes_alarm = np.zeros((nb_classes_alarm + 1, nb_classes_alarm + 1)).astype('uint8')
-        classes_vehicle = np.zeros((nb_classes_vehicle + 1, nb_classes_vehicle + 1)).astype('uint8')
-        yt_file = get_yt_name(audio_file)
-        cl_a = set_dict[yt_file]['classes_alarm']
-        cl_v = set_dict[yt_file]['classes_vehicle']
-        indices_a = [alarm_classes.index(c) for c in cl_a]
-        indices_v = [alarm_classes.index(c) for c in cl_v]
-        for i in indices_a:
-            classes_alarm[i, i] = 1
-        for i in indices_v:
-            classes_vehicle[i, i] = 1
+            indices_a_w = [alarm_classes.index(c) + 1 for c in cl_a_w] + [0]
+            indices_v_w = [vehicle_classes.index(c) + 1 for c in cl_v_w] + [0]
 
-        to_return.append({
-            'audio_features': features,
-            'classes_alarm': classes_alarm,
-            'classes_vehicle': classes_vehicle,
-        })
+            strong_a = [(alarm_classes.index(c) + 1, ) + t for c, t in zip(cl_a_s, times_a_s)]
+            strong_v = [(vehicle_classes.index(c) + 1, ) + t for c, t in zip(cl_v_s, times_v_s)]
 
-    return to_return
+            to_return_inner.append({
+                'audio_features': features,
+                'classes_alarm_weak': indices_a_w,
+                'classes_vehicle_weak': indices_v_w,
+                'classes_alarm_strong': strong_a,
+                'classes_vehicle_strong': strong_v,
+            })
+
+        return to_return_inner
+
+    return process_set(audio_files[0], sets_dict[0]), process_set(audio_files[1], sets_dict[1])
 
 
-def prepare_data(for_set):
+def prepare_data(set_files):
     """
 
-    :param for_set:
-    :type for_set: str
+    :param set_files:
+    :type set_files: list[str]
     :return:
     :rtype: (list[dict[str, numpy.core.multiarray.ndarray]], \
             list[dict[str, numpy.core.multiarray.ndarray]],
             list[dict[str, numpy.core.multiarray.ndarray]])
     """
     # Get all wav files
-    all_files_training = [os.path.abspath(f) for f in os.listdir(audio_files_dir.format(training_file))]
-    set_dict = make_dict_from_csv(for_set)
-    return process_data(all_files_training, set_dict)
+    sets_dict = make_dicts_from_csvs(set_files)
+    all_training = [os.path.abspath(f) for f in os.listdir(audio_files_dir_training)]
+    all_testing = [os.path.abspath(f) for f in os.listdir(audio_files_dir_testing)]
+
+    return process_data([all_training, all_testing], sets_dict)
 
 
 def make_fuel_dataset(file_name, training_set, testing_set_weak, testing_set_strong):
@@ -237,7 +297,7 @@ def make_fuel_dataset(file_name, training_set, testing_set_weak, testing_set_str
     split_dict = {
         'train': {
             'audio_features': (0, nb_training_examples),
-            'targets_weak': (0, nb_training_examples),
+            'targets_vehicle_weak': (0, nb_training_examples),
             'targets_strong': (0, nb_training_examples)
         },
         'test': {
@@ -253,7 +313,12 @@ def make_fuel_dataset(file_name, training_set, testing_set_weak, testing_set_str
 
 
 def main():
-    training, testing_weak, testing_strong = prepare_data(training_file)
+    set_files = [
+        training_file,
+        testing_file_weak_labels,
+        testing_file_strong_labels
+    ]
+    training, testing_weak, testing_strong = prepare_data(set_files)
     make_fuel_dataset(fuel_dataset_file, training, testing_weak, testing_strong)
 
 

@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """
 Defines a class that is used to featurize audio clips, and provide
 them to the network for training or testing.

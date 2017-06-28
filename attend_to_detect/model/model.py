@@ -12,21 +12,25 @@ from math import floor
 class RNNModelWithSkipConnections(nn.Module):
 
     def __init__(self, n_input, n_hidden, n_readouts, n_output,
-             n_filters=64, context=(21, 11)):
+                 n_filters=64, context=(21, 11), stride=(2, 1), rnn_bias=False):
         super(RNNModelWithSkipConnections, self).__init__()
         n_layers = 3
 
-        pad_t = floor((context[1] - 1)/ 2)
+        pad_t = floor((context[1] - 1) / 2)
 
-        self.input_layer = nn.Conv2d(
+        self.input_conv_layer = nn.Conv2d(
             1, n_filters,
-            kernel_size=context, stride=(2, 1), padding=(0, pad_t))
+            kernel_size=context,
+            stride=stride,
+            padding=(0, pad_t)
+        )
 
         self.rnn_in_size = n_filters * floor((n_input - context[0] + 1)/2 + 1)
 
-        self.rnn0 = nn.GRUCell(self.rnn_in_size, n_hidden, bias=False)
-        self.rnn1 = nn.GRUCell(n_hidden, n_hidden, bias=False)
-        self.rnn2 = nn.GRUCell(n_hidden, n_hidden, bias=False)
+        # Why not use bias on RNNs?
+        self.rnn0 = nn.GRUCell(self.rnn_in_size, n_hidden, bias=rnn_bias)
+        self.rnn1 = nn.GRUCell(n_hidden, n_hidden, bias=rnn_bias)
+        self.rnn2 = nn.GRUCell(n_hidden, n_hidden, bias=rnn_bias)
         self.rnns = [self.rnn0, self.rnn1, self.rnn2]
 
         # Transitions from input to hidden layers
@@ -73,8 +77,9 @@ class RNNModelWithSkipConnections(nn.Module):
         # First, do the convolutions
         #x_conv = x.transpose(0, 1).transpose(1, 2).contiguous()
         #x_conv = x_conv.view(x.size(1), 1, x.size(2), x.size(0))
-        y_conv = self.input_layer(x).view(x.size(0),
-                self.rnn_in_size, x.size(3))
+        y_conv = self.input_conv_layer(x).view(
+            x.size(0), self.rnn_in_size, x.size(3)
+        )
         x_rnn = y_conv.transpose(1, 2).transpose(0, 1).contiguous()
 
         # Loop across timesteps
@@ -165,16 +170,16 @@ def valid_fn(model, criterion, batch):
 
 
 if __name__ == '__main__':
-    x = Variable(torch.randn(5, 4, 161).cuda())
+    x_ = Variable(torch.randn(5, 4, 161).cuda())
     y = Variable(torch.randn(5, 4, 161).cuda(), requires_grad=False)
     model = RNNModelWithSkipConnections(161, 20, 20, 161).cuda()
-    h0 = model.init_hidden(4)
+    h0_ = model.init_hidden(4)
 
     criterion = torch.nn.MSELoss(size_average=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     for k in range(1000):
-        y_hat = model.forward(x, h0)
+        y_hat = model.forward(x_, h0_)
         loss = criterion(y_hat, y)
         print('It. {}: {}'.format(k, loss.cpu().data[0]))
         optimizer.zero_grad()

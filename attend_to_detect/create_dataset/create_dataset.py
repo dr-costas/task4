@@ -12,14 +12,23 @@ from fuel.datasets import H5PYDataset
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
+small_tests = False
 
-training_file = 'training_set_test.csv'
-testing_file_weak_labels = 'testing_set_test.csv'
-testing_file_strong_labels = 'groundtruth_strong_label_testing_set_test.csv'
+if small_tests:
+    audio_files_dir_training = 'audio_files_small_tests'
+    audio_files_dir_testing = 'audio_files_testing_small_tests'
+    training_file = 'training_set_test.csv'
+    testing_file_weak_labels = 'testing_set_test.csv'
+    testing_file_strong_labels = 'groundtruth_strong_label_testing_set_test.csv'
+else:
+    audio_files_dir_training = 'audio_files_training'
+    audio_files_dir_testing = 'audio_files_testing'
+    training_file = 'training_set.csv'
+    testing_file_weak_labels = 'testing_set.csv'
+    testing_file_strong_labels = 'groundtruth_strong_label_testing_set.csv'
+
 fuel_dataset_file = 'dcase_2017_task_4_test.hdf5'
-audio_files_dir_training = 'audio_files_small_tests'
-audio_files_dir_testing = 'audio_files_test_small_tests'
-# audio_files_dir_testing = 'audio_files_testing'
+
 
 alarm_classes = [
     'Train horn',

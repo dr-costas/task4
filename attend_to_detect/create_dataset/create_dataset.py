@@ -16,9 +16,10 @@ __docformat__ = 'reStructuredText'
 training_file = 'training_set_test.csv'
 testing_file_weak_labels = 'testing_set_test.csv'
 testing_file_strong_labels = 'groundtruth_strong_label_testing_set_test.csv'
-fuel_dataset_file = 'dcase_2017_task_4.hdf5'
+fuel_dataset_file = 'dcase_2017_task_4_test.hdf5'
 audio_files_dir_training = 'audio_files_small_tests'
-audio_files_dir_testing = 'audio_files_testing'
+audio_files_dir_testing = 'audio_files_test_small_tests'
+# audio_files_dir_testing = 'audio_files_testing'
 
 alarm_classes = [
     'Train horn',
@@ -96,9 +97,9 @@ def make_dicts_from_csvs(csv_file_names):
                     'end': float(row[2]),
                     'classes_alarm_weak': classes_alarm,
                     'classes_vehicle_weak': classes_vehicle,
-                    'classes_alarm_strong_labels': [],
+                    'classes_alarm_strong': [],
                     'classes_alarm_strong_times': [],
-                    'classes_vehicle_strong_labels': [],
+                    'classes_vehicle_strong': [],
                     'classes_vehicle_strong_times': []
                 }
             })
@@ -123,9 +124,9 @@ def make_dicts_from_csvs(csv_file_names):
                     'end': float(row[2]),
                     'classes_alarm_weak': classes_alarm,
                     'classes_vehicle_weak': classes_vehicle,
-                    'classes_alarm_strong_labels': [],
+                    'classes_alarm_strong': [],
                     'classes_alarm_strong_times': [],
-                    'classes_vehicle_strong_labels': [],
+                    'classes_vehicle_strong': [],
                     'classes_vehicle_strong_times': []
                 }
             })
@@ -137,10 +138,10 @@ def make_dicts_from_csvs(csv_file_names):
             for s in row[3].split(','):
                 s_strip = s.strip()
                 if s_strip in alarm_classes:
-                    to_return_testing[yt_id]['classes_alarm_strong_labels'].append(s_strip)
+                    to_return_testing[yt_id]['classes_alarm_strong'].append(s_strip)
                     to_return_testing[yt_id]['classes_alarm_strong_times'].append([start_time, end_time])
                 elif s_strip in vehicle_classes:
-                    to_return_testing[yt_id]['classes_vehicle_strong_labels'].append(s_strip)
+                    to_return_testing[yt_id]['classes_vehicle_strong'].append(s_strip)
                     to_return_testing[yt_id]['classes_vehicle_strong_times'].append([start_time, end_time])
 
     return [to_return_training, to_return_testing]
@@ -154,7 +155,7 @@ def get_yt_name(file_name):
     :return:
     :rtype: str
     """
-    return ''.join(os.path.split(file_name)[-1].split('_')[:-2])[1:]
+    return '_'.join(os.path.split(file_name)[-1].split('_')[:-2])[1:]
 
 
 def process_data(audio_files, sets_dict):
@@ -183,15 +184,32 @@ def process_data(audio_files, sets_dict):
             indices_a_w = [alarm_classes.index(c) + 1 for c in cl_a_w] + [0]
             indices_v_w = [vehicle_classes.index(c) + 1 for c in cl_v_w] + [0]
 
-            strong_a = [(alarm_classes.index(c) + 1, ) + t for c, t in zip(cl_a_s, times_a_s)]
-            strong_v = [(vehicle_classes.index(c) + 1, ) + t for c, t in zip(cl_v_s, times_v_s)]
+            one_hot_a_w = np.zeros((len(indices_a_w), len(alarm_classes) + 1))
+            for i, e in enumerate(indices_a_w):
+                one_hot_a_w[i, e] = 1
+
+            one_hot_v_w = np.zeros((len(indices_v_w), len(vehicle_classes) + 1))
+            for i, e in enumerate(indices_v_w):
+                one_hot_v_w[i, e] = 1
+
+            strong_a = np.zeros((len(cl_a_s), 3))
+            for i in range(len(cl_a_s)):
+                strong_a[i, 0] = alarm_classes.index(cl_a_s[i]) + 1
+                strong_a[i, 1] = int(times_a_s[i][0])
+                strong_a[i, 2] = int(times_a_s[i][1])
+
+            strong_v = np.zeros((len(cl_v_s), 3))
+            for i in range(len(cl_v_s)):
+                strong_v[i, 0] = vehicle_classes.index(cl_v_s[i]) + 1
+                strong_v[i, 1] = int(times_v_s[i][0])
+                strong_v[i, 2] = int(times_v_s[i][1])
 
             to_return_inner.append({
                 'audio_features': features,
-                'classes_alarm_weak': indices_a_w,
-                'classes_vehicle_weak': indices_v_w,
-                'classes_alarm_strong': strong_a,
-                'classes_vehicle_strong': strong_v,
+                'classes_alarm_weak': one_hot_a_w.astype('uint8'),
+                'classes_vehicle_weak': one_hot_v_w.astype('uint8'),
+                'classes_alarm_strong': np.array(strong_a),
+                'classes_vehicle_strong': np.array(strong_v),
             })
 
         return to_return_inner
@@ -210,87 +228,60 @@ def prepare_data(set_files):
     """
     # Get all wav files
     sets_dict = make_dicts_from_csvs(set_files)
-    all_training = [os.path.abspath(f) for f in os.listdir(audio_files_dir_training)]
-    all_testing = [os.path.abspath(f) for f in os.listdir(audio_files_dir_testing)]
+    all_training = [os.path.join(audio_files_dir_training, f) for f in os.listdir(audio_files_dir_training)]
+    all_testing = [os.path.join(audio_files_dir_testing, f) for f in os.listdir(audio_files_dir_testing)]
 
     return process_data([all_training, all_testing], sets_dict)
 
 
-def make_fuel_dataset(file_name, training_set, testing_set_weak):
+def make_fuel_dataset(file_name, training_set_data, testing_set_data):
     """
 
     :param file_name:
     :type file_name:
-    :param training_set:
-    :type training_set: list[dict[str, numpy.core.multiarray.ndarray]]
-    :param testing_set_weak:
-    :type testing_set_weak: list[dict[str, numpy.core.multiarray.ndarray]]
+    :param training_set_data:
+    :type training_set_data: list[dict[str, numpy.core.multiarray.ndarray]]
+    :param testing_set_data:
+    :type testing_set_data: list[dict[str, numpy.core.multiarray.ndarray]]
     :return:
     :rtype:
     """
     f = h5py.File(file_name, mode='w')
 
-    nb_training_examples = len(training_set)
-    nb_testing_examples = len(testing_set_weak)
+    nb_training_examples = len(training_set_data)
+    nb_testing_examples = len(testing_set_data)
     nb_examples = nb_training_examples + nb_testing_examples
 
-    # Audio features
-    audio_features = f.create_dataset(
-        'audio_features', (nb_examples, ),
-        dtype=h5py.special_dtype(vlen=np.dtype('float32'))
-    )
+    ts = [
+          ('audio_features', 'audio_features', 'float32'),
+          ('targets_weak_alarm', 'classes_alarm_weak', 'uint8'),
+          ('targets_weak_vehicle', 'classes_vehicle_weak', 'uint8'),
+          ('targets_strong_alarm', 'classes_alarm_strong', 'uint8'),
+          ('targets_strong_vehicle', 'classes_vehicle_strong', 'uint8')
+          ]
 
-    audio_features[...] = [entry['audio_features'].flatten()
-                           for entry in training_set + testing_set_weak]
+    shape_labels = ['batch'.encode('utf8'), 'time_frames'.encode('utf8'), 'features'.encode('utf8')]
+    datasets = []
+    datasets_shapes = []
+    datasets_shapes_labels = []
+    for t in ts:
+        datasets.append(f.create_dataset(t[0], (nb_examples, ), dtype=h5py.special_dtype(vlen=np.dtype(t[2]))))
+        datasets[-1][...] = [entry[t[1]].flatten() for entry in training_set_data + testing_set_data]
 
-    audio_features_shapes = f.create_dataset(
-        'audio_features_shapes', (nb_examples, 2), dtype='int32')
-    audio_features_shapes[...] = np.array([
-        entry['audio_features'].reshape((1, ) + entry['audio_features'].shape).shape
-        for entry in training_set + testing_set_weak]
-    )
-    audio_features.dims.create_scale(audio_features_shapes, 'shapes')
-    audio_features.dims[0].attach_scale(audio_features_shapes)
+        datasets_shapes.append(f.create_dataset('{}_shapes'.format(t[0]), (nb_examples, 3), dtype='int32'))
+        datasets_shapes[-1][...] = np.array([entry[t[1]].reshape((1, ) + entry[t[1]].shape).shape
+                                             for entry in training_set_data + testing_set_data])
+        datasets[-1].dims.create_scale(datasets_shapes[-1], 'shapes')
+        datasets[-1].dims[0].attach_scale(datasets_shapes[-1])
 
-    audio_features_shape_labels = f.create_dataset('audio_features_shape_labels', (3, ), dtype='S11')
-    audio_features_shape_labels[...] = [
-        'batch'.encode('utf8'), 'time_frames'.encode('utf8'), 'features'.encode('utf8')
-    ]
-    audio_features.dims.create_scale(audio_features_shape_labels, 'shape_labels')
-    audio_features.dims[0].attach_scale(audio_features_shape_labels)
-
-    # Weak labels
-    weak_labels_datasets = []
-    tuples_weak = [('targets_vehicle_weak', 'classes_vehicle'),
-                   ('targets_alarm_weak', 'classes_alarm')]
-
-    for t in tuples_weak:
-        d = f.create_dataset(t[0], (nb_examples, ) + training_set[0][t[1]].shape, dtype='unit8')
-        shape_vehicle_weak = (1,) + training_set[0][t[1]].shape
-        d[...] = np.vstack([pair[t[1]].reshape(shape_vehicle_weak)
-                            for pair in training_set + testing_set_weak])
-
-        for i, label in enumerate(['batch', 'classes_frames', 'targets']):
-            d.dims[i] = label
-
-        weak_labels_datasets.append(d)
-
-    # Strong labels
-    strong_labels_datasets = []
-    tuples_strong = [('targets_vehicle_strong', 'classes_vehicle'),
-                     ('targets_alarm_strong', 'classes_alarm')]
+        datasets_shapes_labels.append(f.create_dataset('{}_shape_labels'.format(t[0]), (3, ), dtype='S11'))
+        datasets_shapes_labels[-1][...] = shape_labels
+        datasets[-1].dims.create_scale(datasets_shapes_labels[-1], 'shape_labels')
+        datasets[-1].dims[0].attach_scale(datasets_shapes_labels[-1])
 
     split_dict = {
-        'train': {
-            'audio_features': (0, nb_training_examples),
-            'targets_vehicle_weak': (0, nb_training_examples),
-            'targets_strong': (0, nb_training_examples)
-        },
-        'test': {
-            'audio_features': (nb_training_examples, nb_examples),
-            'targets_weak': (nb_training_examples, nb_examples),
-            'targets_strong': (nb_training_examples, nb_examples)
-        }
+        'train': {t[0]: (0, nb_training_examples) for t in ts},
+        'test': {t[0]: (nb_training_examples, nb_examples) for t in ts}
     }
 
     f.attrs['split'] = H5PYDataset.create_split_array(split_dict)

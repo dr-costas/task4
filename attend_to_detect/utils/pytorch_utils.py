@@ -1,20 +1,20 @@
+from __future__ import print_function
 import torch
 from torch.autograd import Variable
 
 import numpy as np
-import pickle
 
 import os
-from glob import glob
 from tqdm import tqdm
+
 
 class TrainLoop(object):
 
     def __init__(self, model,
-            optimizer, criterion,
-            train_fn, train_iter,
-            valid_fn, valid_iter,
-            checkpoint_path=None):
+                 optimizer, criterion,
+                 train_fn, train_iter,
+                 valid_fn, valid_iter,
+                 checkpoint_path=None):
         self.model = model
         self.optimizer = optimizer
         self.criterion = criterion
@@ -28,7 +28,7 @@ class TrainLoop(object):
         else:
             self.checkpoint_path = checkpoint_path
         self.history = {'train_loss': [],
-                'valid_loss': []}
+                        'valid_loss': []}
         self.total_iters = 0
         self.cur_epoch = 0
 
@@ -49,9 +49,9 @@ class TrainLoop(object):
             train_loss = self.history['train_loss'][-1]
             for t, batch in train_iter:
                 train_loss.append(self.train_fn(self.model,
-                    self.optimizer,
-                    self.criterion,
-                    batch))
+                                                self.optimizer,
+                                                self.criterion,
+                                                batch))
                 train_iter.set_postfix(loss=np.mean(train_loss))
                 self.total_iters += 1
                 if save_every is not None:
@@ -62,7 +62,7 @@ class TrainLoop(object):
             val_loss = 0.0
             for t, batch in enumerate(self.valid_iter):
                 val_loss += self.valid_fn(self.model, self.criterion, batch)
-            val_loss /= t+1
+            val_loss /= t + 1
             print('Validation loss: {}'.format(val_loss))
             self.history['valid_loss'].append(val_loss)
 
@@ -76,7 +76,6 @@ class TrainLoop(object):
                     'total_iters': self.total_iters,
                     'cur_epoch': self.cur_epoch}
             torch.save(ckpt, save_epoch_fmt.format(epoch))
-
 
     def load_checkpoint(self, ckpt):
         ckpt = torch.load(ckpt)
@@ -94,15 +93,15 @@ if __name__ == '__main__':
     from torch.utils.data import TensorDataset, DataLoader
     # Setup dummy model and optimizer
     model = torch.nn.Sequential(torch.nn.Linear(10, 20),
-            torch.nn.ReLU(),
-            torch.nn.Linear(20, 10))
+                                torch.nn.ReLU(),
+                                torch.nn.Linear(20, 10))
     opt = torch.optim.Adam(model.parameters())
     criterion = torch.nn.MSELoss()
 
     train_data = TensorDataset(torch.rand(64, 10),
-            torch.rand(64, 10))
+                               torch.rand(64, 10))
     valid_data = TensorDataset(torch.rand(32, 10),
-            torch.rand(32, 10))
+                               torch.rand(32, 10))
 
     train_iter = DataLoader(train_data, 8, shuffle=True)
     valid_iter = DataLoader(valid_data, 8)
@@ -133,9 +132,9 @@ if __name__ == '__main__':
 
     print('Testing creation of TrainLoop')
     tl = TrainLoop(model, opt, criterion,
-            train_fn, train_iter,
-            valid_fn, valid_iter,
-            checkpoint_path='test_ckpt')
+                   train_fn, train_iter,
+                   valid_fn, valid_iter,
+                   checkpoint_path='test_ckpt')
 
     print('Testing tl.train')
     tl.train(n_epochs=5)

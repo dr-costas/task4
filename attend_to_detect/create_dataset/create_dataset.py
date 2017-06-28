@@ -206,7 +206,6 @@ def prepare_data(set_files):
     :type set_files: list[str]
     :return:
     :rtype: (list[dict[str, numpy.core.multiarray.ndarray]], \
-            list[dict[str, numpy.core.multiarray.ndarray]],
             list[dict[str, numpy.core.multiarray.ndarray]])
     """
     # Get all wav files
@@ -217,7 +216,7 @@ def prepare_data(set_files):
     return process_data([all_training, all_testing], sets_dict)
 
 
-def make_fuel_dataset(file_name, training_set, testing_set_weak, testing_set_strong):
+def make_fuel_dataset(file_name, training_set, testing_set_weak):
     """
 
     :param file_name:
@@ -226,8 +225,6 @@ def make_fuel_dataset(file_name, training_set, testing_set_weak, testing_set_str
     :type training_set: list[dict[str, numpy.core.multiarray.ndarray]]
     :param testing_set_weak:
     :type testing_set_weak: list[dict[str, numpy.core.multiarray.ndarray]]
-    :param testing_set_strong:
-    :type testing_set_strong: list[dict[str, numpy.core.multiarray.ndarray]]
     :return:
     :rtype:
     """
@@ -283,17 +280,6 @@ def make_fuel_dataset(file_name, training_set, testing_set_weak, testing_set_str
     tuples_strong = [('targets_vehicle_strong', 'classes_vehicle'),
                      ('targets_alarm_strong', 'classes_alarm')]
 
-    for t in tuples_strong:
-        d = f.create_dataset(t[0], (nb_examples, ) + testing_set_strong[0][t[1]].shape, dtype='unit8')
-        shapes = (1,) + testing_set_strong[0][t[1]].shape
-        d[...] = np.vstack([np.zeros(shapes) for _ in training_set] +
-                           [pair[t[1]].reshape(shapes) for pair in testing_set_strong])
-
-        for i, label in enumerate(['batch', 'time_frames', 'targets']):
-            d[i].label = label
-
-        strong_labels_datasets.append(d)
-
     split_dict = {
         'train': {
             'audio_features': (0, nb_training_examples),
@@ -318,8 +304,8 @@ def main():
         testing_file_weak_labels,
         testing_file_strong_labels
     ]
-    training, testing_weak, testing_strong = prepare_data(set_files)
-    make_fuel_dataset(fuel_dataset_file, training, testing_weak, testing_strong)
+    training, testing_weak = prepare_data(set_files)
+    make_fuel_dataset(fuel_dataset_file, training, testing_weak)
 
 
 if __name__ == '__main__':

@@ -22,6 +22,14 @@ class Encoder(nn.Module):
 
 
 class CategoryBranch(nn.Module):
+    """One category branch
+
+    Intended use:
+    >>> branch = CategoryBranch(5, 5, 3)
+    >>> hid, weights = branch(input_, output)
+    >>> cost = branch.cost(hid, output)
+
+    """
     def __init__(self, input_dim, decoder_dim, output_classes,
                  monotonic_attention=False, bias=False):
         super(CategoryBranch, self).__init__()

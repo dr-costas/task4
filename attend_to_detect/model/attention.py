@@ -88,6 +88,6 @@ class GaussianAttention(nn.Module):
         attn3 = attn.unsqueeze(2)
 
         weighted_context = attn3.expand_as(context) * context
-        context_combined = weighted_context.sum(dim=1)
+        context_combined = weighted_context.sum(dim=1).squeeze(1)
 
         return context_combined, attn, kappa

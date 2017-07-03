@@ -15,9 +15,9 @@ class Encoder(nn.Module):
         self.convnet = Linear(input_dim, output_dim)
 
     def forward(self, input_):
-        input_flat = input_.view(input_.size(0), -1)
+        input_flat = input_.view(-1, input_.size(2))
         output = self.convnet(input_flat)
-        output3d = output.view(output.size(0), input_.size(1), input_.size(2))
+        output3d = output.view(input_.size(0), input_.size(1), output.size(1))
         return output3d
 
 
@@ -70,9 +70,9 @@ class CategoryBranch(nn.Module):
 
             out_hidden.append(self.output_linear(hidden).unsqueeze(1))
             out_weights.append(weights)
-        return torch.cat(out_hidden, dimension=1), out_weights
+        return torch.cat(out_hidden, 1), out_weights
 
     def cost(self, out_hidden, target):
-        out_hidden_flat = out_hidden.view(out_hidden.size(0), -1)
-        target_flat = target.view(target.size(0), -1)
+        out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
+        target_flat = target.view(target.size(1))
         return cross_entropy(out_hidden_flat, target_flat)

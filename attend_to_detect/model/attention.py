@@ -31,12 +31,12 @@ class ContentAttention(nn.Module):
         attn = softmax(attn)
         attn3 = attn.view(attn.size(0), 1, attn.size(1))  # batch x 1 x sourceL
 
-        weightedContext = torch.bmm(attn3, context).squeeze(1)  # batch x dim
-        contextCombined = torch.cat((weightedContext, input), 1)
+        weighted_context = torch.bmm(attn3, context).squeeze(1)  # batch x dim
+        context_combined = torch.cat((weighted_context, input), 1)
 
-        contextOutput = tanh(self.linear_out(contextCombined))
+        context_output = tanh(self.linear_out(context_combined))
 
-        return contextOutput, attn
+        return context_output, attn
 
 
 class GaussianAttention(nn.Module):

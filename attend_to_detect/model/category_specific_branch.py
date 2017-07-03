@@ -42,7 +42,7 @@ class CategoryBranch(torch.nn.Module):
 
             out_hidden.append(self.output_linear(hidden).unsqueeze(1))
             out_weights.append(weights)
-        return torch.cat(out_hidden, dimension=1), weights
+        return torch.cat(out_hidden, dimension=1), out_weights
 
     def cost(self, out_hidden, target):
         out_hidden_flat = out_hidden.view(out_hidden.size(0), -1)

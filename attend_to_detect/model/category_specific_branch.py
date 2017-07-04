@@ -1,78 +1,99 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# imports
-from __future__ import division
 import torch
 
-class CategoryBranch(torch.nn.Module):
+from torch import nn
+from torch.autograd import Variable
+from torch.nn import GRUCell, Linear
+from torch.nn.functional import cross_entropy
 
-    def __init__(self, n_bins, n_filters, kernel_shape=(3,3), stride=1,
-            n_timesteps=10, rnn_dims=[256, 256], rnn_bias=True):
-        super(CategoryBranch, self).__init__()
+from .attention import GaussianAttention
 
-        self.conv = nn.Conv2d(
+
+class Encoder(nn.Module):
+    def __init__(self, input_dim, n_filters, kernel_shape=(3,3), stride=(2,2)):
+        super(Encoder, self).__init__()
+        self.convnet = nn.Conv2d(
             1, n_filters,
-            kernel_size=conv_shape,
+            kernel_size=kernel_shape,
             stride=stride,
-            padding=(0, (kernel_shape-1)//2)
+            padding=((kernel_shape[0]-1)//2, (kernel_shape[1]-1)//2)
         )
+        self.n_filters = n_filters
+        self.input_dim = input_dim
+        self.output_dim = (input_dim[0]//stride[0], n_filters * input_dim[1]//stride[1])
 
-        self.rnn_in_size = n_filters * floor((n_bins - kernel_shape[0] + 1)/2 + 1)
+    def forward(self, x):
+        '''input shape: (batch_size, 1, n_bins, n_frames)
+        output shape: (batch_size, n_frames/stride[1], n_filters * n_bins/stride[0])
+        '''
+        output3d = self.convnet(x).transpose(1, 2)
+        # shape is (batch_size, n_filters, n_frames/stride[0], n_bins/stride[1])
+        output = output3d.view(x.size(0), self.output_dim[0], self.output_dim[1]).contiguous()
+        return output
 
-        self.rnn0 = nn.GRUCell(self.rnn_in_size, rnn_dims[0], bias=rnn_bias)
-        self.rnn1 = nn.GRUCell(rnn_dims[0], rnn_dims[1], bias=rnn_bias)
-        self.rnn2 = nn.GRUCell(rnn_dims[1], rnn_dims[2], bias=rnn_bias)
-        self.rnns = [self.rnn0, self.rnn1, self.rnn2]
+
+class CategoryBranch(nn.Module):
+    """One category branch
+
+    Intended use:
+    >>> branch = CategoryBranch(5, 5, 3)
+    >>> hid, weights = branch(input_, output)
+    >>> cost = branch.cost(hid, output)
+
+    """
+    def __init__(self, input_dim, decoder_dim, output_classes,
+            enc_filters=64, enc_stride=(2, 2), enc_kernel_shape=(3,3),
+            monotonic_attention=False, bias=False):
+        super(CategoryBranch, self).__init__()
 
         self.out = None
 
-        self.init_weights()
+        self.encoder = Encoder(input_dim, enc_filters, enc_kernel_shape, enc_stride)
 
-        self.n_bins = n_bins
-        self.n_filters = n_filters
-        self.rnn_dims = rnn_dims
-        self.n_timesteps = n_timesteps
-
-
-    def init_weights(self):
-        pass
+        self.decoder_dim = decoder_dim
+        self.attention = GaussianAttention(
+            dim=self.decoder_dim, monotonic=monotonic_attention, bias=bias)
+        self.decoder_cell = GRUCell(self.encoder.output_dim[1], self.decoder_dim, bias=bias)
+        self.output_linear = Linear(decoder_dim, output_classes)
 
 
-    def init_hidden(self, batch_size):
-        weight = next(self.parameters()).data
-        hidden = [Variable(weight.new(batch_size, n_hidden).zero_().cuda())
-                  for n_hidden in self.rnn_dims]
-        return hidden
+    @property
+    def is_cuda(self):
+        return next(self.parameters()).is_cuda
 
+    def encode(self, input_):
+        """Produces contexts
 
-    def forward(self, x, h0):
-        # input shape: (batch_size, 1, n_frames, n_bins)
-        # output_shape: (n_timesteps, batch_size, self.rnn_dims[-1])
+        Runs CNN(s) followed by RNN(s)
 
-        # FIXME Should we run the convolution across the entire sequence at once
-        # (840/860 frames) or at each timestep (84/86 frames each) separately?
-        y_conv = self.conv(x).view(
-            x.size(0), self.rnn_in_size, x.size(3)
-        )
-        x_rnn = y_conv.transpose(1, 2).transpose(0, 1).contiguous()
-        h1, h2, h3 = h0
-        out = Variable(torch.zeros(self.n_timesteps, self.batch_size, self.rnn_dims[-1]).cuda())
+        """
+        return self.encoder(input_)
 
-        # FIXME Only needed if we **really** need to change dimensions in between
-        # layers, otherwise torch.nn.GRU will do the job and is much faster.
-        for t in range(self.n_timesteps):
-            h1 = self.rnn0(x_rnn[t], h1)
-            h2 = self.rnn1(h1, h2)
-            h3 = self.rnn2(h2, h3)
-            out[t] = h3
-        return out
+    def get_initial_state(self, input_, context):
+        # TODO: smarter initial state
+        state = Variable(torch.zeros((input_.size(0), self.decoder_dim)))
+        if self.is_cuda:
+            state = state.cuda()
+        return state
 
-def main():
-    pass
+    def forward(self, input_, output):
+        context = self.encode(input_)
 
+        hidden = self.get_initial_state(input_, context)
+        kappa = self.attention.get_inital_kappa(context)
 
-if __name__ == '__main__':
-    main()
+        out_hidden = []
+        out_weights = []
 
-# EOF
+        for i in range(output.size(1)):
+            attended, weights, kappa = self.attention(hidden, context, kappa)
+            hidden = self.decoder_cell(attended, hidden)
+
+            out_hidden.append(self.output_linear(hidden).unsqueeze(1))
+            out_weights.append(weights)
+        return torch.cat(out_hidden, 1), out_weights
+
+    @staticmethod
+    def cost(self, out_hidden, target):
+        out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
+        target_flat = target.view(target.size(1))
+        return cross_entropy(out_hidden_flat, target_flat)

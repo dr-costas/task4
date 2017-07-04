@@ -25,9 +25,9 @@ class Encoder(nn.Module):
         '''input shape: (batch_size, 1, n_bins, n_frames)
         output shape: (batch_size, n_frames/stride[1], n_filters * n_bins/stride[0])
         '''
-        output3d = self.convnet(x).transpose(1, 2)
+        output3d = self.convnet(x).transpose(1, 2).contiguous()
         # shape is (batch_size, n_filters, n_frames/stride[0], n_bins/stride[1])
-        output = output3d.view(x.size(0), self.output_dim[0], self.output_dim[1]).contiguous()
+        output = output3d.view(output3d.size(0), output3d.size(1), -1)
         return output
 
 
@@ -75,16 +75,16 @@ class CategoryBranch(nn.Module):
             state = state.cuda()
         return state
 
-    def forward(self, input_, output):
+    def forward(self, input_, output_len):
         context = self.encode(input_)
 
         hidden = self.get_initial_state(input_, context)
-        kappa = self.attention.get_inital_kappa(context)
+        kappa = self.attention.get_initial_kappa(context)
 
         out_hidden = []
         out_weights = []
 
-        for i in range(output.size(1)):
+        for i in range(output_len):
             attended, weights, kappa = self.attention(hidden, context, kappa)
             hidden = self.decoder_cell(attended, hidden)
 
@@ -97,3 +97,13 @@ class CategoryBranch(nn.Module):
         out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
         target_flat = target.view(target.size(1))
         return cross_entropy(out_hidden_flat, target_flat)
+
+
+if __name__ == '__main__':
+    import ipdb
+    ipdb.set_trace()
+    branch = CategoryBranch((100, 10), 32, 10)
+    x = Variable(torch.rand(16, 1, 100, 10))
+
+    pred = branch(x, 3)
+    print(pred)

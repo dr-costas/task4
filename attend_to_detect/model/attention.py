@@ -51,14 +51,14 @@ class GaussianAttention(nn.Module):
     def apply_mask(self, mask):
         self.mask = mask
 
-    def get_inital_kappa(self, context):
+    def get_initial_kappa(self, context):
         batch_size = context.size(0)
         kappa = Variable(torch.zeros(batch_size))
         if self.is_cuda:
             kappa = kappa.cuda()
         return kappa
 
-    def get_indixes(self, context):
+    def get_indexes(self, context):
         indexes = Variable(torch.arange(0, context.size(1)) / context.size(1),
                            requires_grad=False).unsqueeze(0)
         if self.is_cuda:
@@ -81,10 +81,11 @@ class GaussianAttention(nn.Module):
         if self.mask is not None:
             # TODO: do we need mask?
             pass
-        indexes = self.get_indixes(context)
-        beta_exp = beta.expand_as(indexes)
-        kappa_exp = kappa.expand_as(indexes)
-        attn = torch.exp(-beta_exp * (kappa_exp - indexes)**2)
+        indexes = self.get_indexes(context)
+        indexes_exp = indexes.expand(kappa.size(0), indexes.size(1))
+        beta_exp = beta.contiguous().view(beta.size(0), 1).expand_as(indexes_exp)
+        kappa_exp = kappa.contiguous().view(kappa.size(0), 1).expand_as(indexes_exp)
+        attn = torch.exp(-beta_exp * (kappa_exp - indexes_exp)**2)
         attn3 = attn.unsqueeze(2)
 
         weighted_context = attn3.expand_as(context) * context

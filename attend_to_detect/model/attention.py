@@ -37,11 +37,12 @@ class ContentAttention(nn.Module):
 
 
 class GaussianAttention(nn.Module):
-    def __init__(self, dim, bias=False):
+    def __init__(self, dim, monotonic=False, bias=False):
         super(GaussianAttention, self).__init__()
         self.linear_in = nn.Linear(dim, 2, bias=bias)
         self.linear_out = nn.Linear(dim * 2, dim, bias=bias)
         self.mask = None
+        self.monotonic = monotonic
 
     @property
     def is_cuda(self):
@@ -64,14 +65,17 @@ class GaussianAttention(nn.Module):
             indexes.cuda()
         return indexes
 
-    def forward(self, input, context, kappa_prev):
+    def forward(self, state, context, kappa_prev):
         """
         input: batch x dim
         context: batch x sourceL x dim
         """
-        beta_kappa = torch.exp(self.linear_in(input))
+        beta_kappa = torch.exp(self.linear_in(state))
         beta = beta_kappa[:, 0]
-        kappa = kappa_prev + beta_kappa[:, 1]
+        if self.monotonic:
+            kappa = kappa_prev + beta_kappa[:, 1]
+        else:
+            kappa = beta_kappa[:, 1]
 
         # Get attention
         if self.mask is not None:
@@ -84,6 +88,6 @@ class GaussianAttention(nn.Module):
         attn3 = attn.unsqueeze(2)
 
         weighted_context = attn3.expand_as(context) * context
-        context_combined = weighted_context.sum(dim=1)
+        context_combined = weighted_context.sum(dim=1).squeeze(1)
 
         return context_combined, attn, kappa

@@ -12,14 +12,14 @@ class Encoder(nn.Module):
     def __init__(self, input_dim, n_filters, kernel_shape=(3,3), stride=(2,2)):
         super(Encoder, self).__init__()
         self.convnet = nn.Conv2d(
-            1, n_filters,
+            input_dim[0], n_filters,
             kernel_size=kernel_shape,
             stride=stride,
             padding=((kernel_shape[0]-1)//2, (kernel_shape[1]-1)//2)
         )
         self.n_filters = n_filters
         self.input_dim = input_dim
-        self.output_dim = (input_dim[0]//stride[0], n_filters * input_dim[1]//stride[1])
+        self.output_dim = (input_dim[1]//stride[0], n_filters * input_dim[2]//stride[1])
 
     def forward(self, x):
         '''input shape: (batch_size, 1, n_bins, n_frames)

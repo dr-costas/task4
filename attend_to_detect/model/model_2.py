@@ -123,7 +123,7 @@ def main():
         batch_size=batch_size
     )
 
-    valid_data = get_data_stream(
+    valid_data, _, __ = get_data_stream(
         batch_size=batch_size, that_set='test', scale=False,
         scaler_mean=mean_val, scaler_std=std_val
     )
@@ -155,6 +155,14 @@ def main():
             loss_vehicle.backward()
             optim_vehicle.step()
             optim_common.step()
+
+        for batch in valid_data.get_epoch_iterator():
+            common_features = common_feature_extractor(batch[0])
+            alarm_output = branch_alarm(common_features)
+            vehicle_output = branch_vehicle(common_features)
+
+            loss_alarm = loss_fn_alarm()
+            loss_vehicle = loss_fn_vehicle()
 
 
 if __name__ == '__main__':

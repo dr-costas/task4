@@ -27,7 +27,7 @@ else:
     testing_file_weak_labels = 'testing_set.csv'
     testing_file_strong_labels = 'groundtruth_strong_label_testing_set.csv'
 
-fuel_dataset_file = 'dcase_2017_task_4_test.hdf5'
+fuel_dataset_file = 'dcase_2017_task_4.hdf5'
 
 
 alarm_classes = [
@@ -193,13 +193,15 @@ def process_data(audio_files, sets_dict):
             indices_a_w = [alarm_classes.index(c) + 1 for c in cl_a_w] + [0]
             indices_v_w = [vehicle_classes.index(c) + 1 for c in cl_v_w] + [0]
 
-            one_hot_a_w = np.zeros((len(indices_a_w), len(alarm_classes) + 1))
-            for i, e in enumerate(indices_a_w):
-                one_hot_a_w[i, e] = 1
+            # one_hot_a_w = np.zeros((len(indices_a_w), len(alarm_classes) + 1))
+            # for i, e in enumerate(indices_a_w):
+            #     one_hot_a_w[i, e] = 1
+            one_hot_a_w = np.array(indices_a_w)
 
-            one_hot_v_w = np.zeros((len(indices_v_w), len(vehicle_classes) + 1))
-            for i, e in enumerate(indices_v_w):
-                one_hot_v_w[i, e] = 1
+            # one_hot_v_w = np.zeros((len(indices_v_w), len(vehicle_classes) + 1))
+            # for i, e in enumerate(indices_v_w):
+            #     one_hot_v_w[i, e] = 1
+            one_hot_v_w = np.array(indices_v_w)
 
             strong_a = np.zeros((len(cl_a_s), 3))
             for i in range(len(cl_a_s)):
@@ -262,6 +264,66 @@ def make_fuel_dataset(file_name, training_set_data, testing_set_data):
     nb_examples = nb_training_examples + nb_testing_examples
 
     ts = [
+          # Source/Dataset name, entry in dict, dtype, amount of dims
+          ('audio_features', 'audio_features', 'float32', 3),
+          ('targets_weak_alarm', 'classes_alarm_weak', 'uint8', 2),
+          ('targets_weak_vehicle', 'classes_vehicle_weak', 'uint8', 2),
+          ('targets_strong_alarm', 'classes_alarm_strong', 'uint8', 3),
+          ('targets_strong_vehicle', 'classes_vehicle_strong', 'uint8', 3)
+          ]
+
+    shape_labels_3 = ['time_frames'.encode('utf8'), 'features'.encode('utf8')]
+    shape_labels_2 = ['time_frames'.encode('utf8')]
+    datasets = []
+    datasets_shapes = []
+    datasets_shapes_labels = []
+    for t in ts:
+        datasets.append(f.create_dataset(t[0], (nb_examples, ), dtype=h5py.special_dtype(vlen=np.dtype(t[2]))))
+        datasets[-1][...] = [entry[t[1]].flatten() for entry in training_set_data + testing_set_data]
+
+        datasets_shapes.append(f.create_dataset('{}_shapes'.format(t[0]), (nb_examples, t[-1]), dtype='int32'))
+        datasets_shapes[-1][...] = np.array([entry[t[1]].reshape((1, ) + entry[t[1]].shape).shape
+                                             for entry in training_set_data + testing_set_data])
+        datasets[-1].dims.create_scale(datasets_shapes[-1], 'shapes')
+        datasets[-1].dims[0].attach_scale(datasets_shapes[-1])
+
+        datasets_shapes_labels.append(f.create_dataset('{}_shape_labels'.format(t[0]), (t[-1] - 1, ), dtype='S11'))
+        if t[-1] == 3:
+            datasets_shapes_labels[-1][...] = shape_labels_3
+        else:
+            datasets_shapes_labels[-1][...] = shape_labels_2
+        datasets[-1].dims.create_scale(datasets_shapes_labels[-1], 'shape_labels')
+        datasets[-1].dims[0].attach_scale(datasets_shapes_labels[-1])
+
+    split_dict = {
+        'train': {t[0]: (0, nb_training_examples) for t in ts},
+        'test': {t[0]: (nb_training_examples, nb_examples) for t in ts}
+    }
+
+    f.attrs['split'] = H5PYDataset.create_split_array(split_dict)
+    f.flush()
+    f.close()
+
+
+def make_fuel_dataset_2(file_name, training_set_data, testing_set_data):
+    """
+
+    :param file_name:
+    :type file_name:
+    :param training_set_data:
+    :type training_set_data: list[dict[str, numpy.core.multiarray.ndarray]]
+    :param testing_set_data:
+    :type testing_set_data: list[dict[str, numpy.core.multiarray.ndarray]]
+    :return:
+    :rtype:
+    """
+    f = h5py.File(file_name, mode='w')
+
+    nb_training_examples = len(training_set_data)
+    nb_testing_examples = len(testing_set_data)
+    nb_examples = nb_training_examples + nb_testing_examples
+
+    ts = [
           ('audio_features', 'audio_features', 'float32'),
           ('targets_weak_alarm', 'classes_alarm_weak', 'uint8'),
           ('targets_weak_vehicle', 'classes_vehicle_weak', 'uint8'),
@@ -305,7 +367,7 @@ def main():
         testing_file_strong_labels
     ]
     training, testing_weak = prepare_data(set_files)
-    make_fuel_dataset(fuel_dataset_file, training, testing_weak)
+    make_fuel_dataset_2(fuel_dataset_file, training, testing_weak)
 
 
 if __name__ == '__main__':

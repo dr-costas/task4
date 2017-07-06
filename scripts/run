@@ -52,7 +52,7 @@ def load_data(batch_size, feature_mean=0.0, feature_std=1.0,
     # Add streams to pad/normalize data here
     train_stream = ScaleAndShift(
         Mapping(
-            train_stream,
+        train_stream,
             mapping=padder
         ), -feature_mean/feature_std,
         1/feature_std,

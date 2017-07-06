@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from __future__ import absolute_import
+
+import sys
+
 import torch
 
 from torch import nn
@@ -5,26 +12,30 @@ from torch.autograd import Variable
 from torch.nn import GRUCell, Linear
 from torch.nn.functional import cross_entropy
 
-from .attention import GaussianAttention
+if sys.version_info > (3, 0):
+    from attend_to_detect.model.attention import GaussianAttention
+else:
+    from .attention import GaussianAttention
 
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim, n_filters, kernel_shape=(3,3), stride=(2,2)):
+    def __init__(self, input_dim, n_filters, kernel_shape=(3, 3), stride=(2, 2), padding=None):
         super(Encoder, self).__init__()
         self.convnet = nn.Conv2d(
             input_dim[0], n_filters,
             kernel_size=kernel_shape,
             stride=stride,
-            padding=((kernel_shape[0]-1)//2, (kernel_shape[1]-1)//2)
+            padding=((kernel_shape[0] - 1) // 2, (kernel_shape[1] - 1) // 2) if padding is None else padding
         )
         self.n_filters = n_filters
         self.input_dim = input_dim
-        self.output_dim = (input_dim[1]//stride[0], n_filters * input_dim[2]//stride[1])
+        self.output_dim = (input_dim[1] // stride[0], n_filters * input_dim[2] // stride[1])
 
     def forward(self, x):
-        '''input shape: (batch_size, 1, n_bins, n_frames)
-        output shape: (batch_size, n_frames/stride[1], n_filters * n_bins/stride[0])
-        '''
+        """
+        input shape --> (batch_size, 1, n_bins, n_frames)
+        output shape -->  (batch_size, n_frames/stride[1], n_filters * n_bins/stride[0])
+        """
         output3d = self.convnet(x).transpose(1, 2).contiguous()
         # shape is (batch_size, n_filters, n_frames/stride[0], n_bins/stride[1])
         output = output3d.view(output3d.size(0), output3d.size(1), -1)
@@ -40,9 +51,10 @@ class CategoryBranch(nn.Module):
     >>> cost = branch.cost(hid, output)
 
     """
+
     def __init__(self, input_dim, decoder_dim, output_classes,
-            enc_filters=64, enc_stride=(2, 2), enc_kernel_shape=(3,3),
-            monotonic_attention=False, bias=False):
+                 enc_filters=64, enc_stride=(2, 2), enc_kernel_shape=(3, 3),
+                 monotonic_attention=False, bias=False):
         super(CategoryBranch, self).__init__()
 
         self.out = None
@@ -54,7 +66,6 @@ class CategoryBranch(nn.Module):
             dim=self.decoder_dim, monotonic=monotonic_attention, bias=bias)
         self.decoder_cell = GRUCell(self.encoder.output_dim[1], self.decoder_dim, bias=bias)
         self.output_linear = Linear(decoder_dim, output_classes)
-
 
     @property
     def is_cuda(self):
@@ -99,7 +110,7 @@ class CategoryBranch(nn.Module):
         return cross_entropy(out_hidden_flat, target_flat)
 
 
-if __name__ == '__main__':
+def main():
     import ipdb
     ipdb.set_trace()
     branch = CategoryBranch((100, 10), 32, 10)
@@ -107,3 +118,7 @@ if __name__ == '__main__':
 
     pred = branch(x, 3)
     print(pred)
+
+
+if __name__ == '__main__':
+    main()

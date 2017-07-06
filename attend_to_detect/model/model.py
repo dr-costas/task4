@@ -2,11 +2,43 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+import sys
+
+import numpy as np
+
 import torch
 from torch import nn
 from torch.autograd import Variable
 
-from .model.category_specific_branch import CategoryBranch
+if sys.version_info > (3, 0):
+    from attend_to_detect.model.category_specific_branch import CategoryBranch
+else:
+    from .model.category_specific_branch import CategoryBranch
+
+
+# def padder(data, indices):
+#     data = list(data)
+#     masks = []
+#     for index in indices:
+#         index_masks = []
+#         max_ts = np.max([datum.shape[-2] for datum in data[index]])
+#
+#         for i in range(len(data[index])):
+#             len_dif = max_ts - data[index][i].shape[-2]
+#             tmp = np.ones(data[index][i].shape[:-2] + (max_ts, ) + data[index][i].shape[-1:])
+#             if len_dif > 0:
+#                 data[index][i] = np.concatenate((
+#                     data[index][i],
+#                     np.zeros((1, len_dif, data[index][i].shape[-1]))),
+#                     axis=-2
+#                 )
+#                 if index != 0:
+#                     data[index][i][:, -len_dif:, 0] = 1
+#
+#     data = tuple(data)
+#
+#     return data
+
 
 class AttendToDetect(nn.Module):
 
@@ -32,7 +64,10 @@ class AttendToDetect(nn.Module):
         return (predA, weightsA), (predB, weightsB)
 
 
-def train_fn(model, optimizer, criterion, batch):
+def train_fn(layers, optim, loss_criterion, batch):
+
+    padded_batch = padder(batch)
+
     x, y = batch
 
     x = Variable(torch.from_numpy(x.astype('float32')).cuda())
@@ -43,17 +78,17 @@ def train_fn(model, optimizer, criterion, batch):
     for k, l in enumerate(lengths):
         mask[:l, k, :] = 0
 
-    y_hat = model.forward(x, hidden)
+    y_hat = layers.forward(x, hidden)
 
     # Apply mask
     y_hat.masked_fill_(mask, 0.0)
     y.masked_fill_(mask, 0.0)
 
-    loss = criterion(y_hat, y)
+    loss = loss_criterion(y_hat, y)
 
-    optimizer.zero_grad()
+    optim.zero_grad()
     loss.backward()
-    optimizer.step()
+    optim.step()
 
     return loss.data[0]
 
@@ -80,13 +115,13 @@ def valid_fn(model, criterion, batch):
     return val_loss
 
 
-if __name__ == '__main__':
+def main():
     x_ = Variable(torch.randn(5, 4, 161).cuda())
     y = Variable(torch.randn(5, 4, 161).cuda(), requires_grad=False)
     model = RNNModelWithSkipConnections(161, 20, 20, 161).cuda()
     h0_ = model.init_hidden(4)
 
-    criterion = torch.nn.MSELoss(size_average=False)
+    criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     for k in range(1000):
@@ -96,4 +131,8 @@ if __name__ == '__main__':
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
+
+if __name__ == '__main__':
+    main()
 

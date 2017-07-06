@@ -12,7 +12,7 @@ from fuel.datasets import H5PYDataset
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
-small_tests = False
+small_tests = True
 
 if small_tests:
     audio_files_dir_training = 'audio_files_small_tests'

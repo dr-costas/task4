@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 # imports
+from operator import mul
+from functools import reduce
 import torch
 from torch.autograd import Variable
 
@@ -26,7 +28,8 @@ class CategoryBranch2(torch.nn.Module):
                  cnn_kernel_sizes, cnn_strides, cnn_paddings, cnn_activations,
                  max_pool_kernels, max_pool_strides, max_pool_paddings,
                  rnn_input_size, rnn_out_dims, rnn_activations,
-                 dropout_cnn, dropout_rnn_input, dropout_rnn_recurrent):
+                 dropout_cnn, dropout_rnn_input, dropout_rnn_recurrent,
+                 rnn_subsamplings):
 
         super(CategoryBranch2, self).__init__()
 
@@ -52,6 +55,8 @@ class CategoryBranch2(torch.nn.Module):
         rnn_len = len(self.rnn_out_dims) - 1
         self.rnn_activations_f = make_me_a_list(rnn_activations, rnn_len)
         self.rnn_activations_b = make_me_a_list(rnn_activations, rnn_len)
+
+        self.rnn_subsamplings = make_me_a_list(rnn_subsamplings, rnn_len - 1) + [1]
 
         self.dropout_cnn = dropout_cnn
         self.dropout_rnn_input_f = dropout_rnn_input
@@ -126,6 +131,11 @@ class CategoryBranch2(torch.nn.Module):
             self.rnn_dropout_layers_recurrent_f.append(
                 torch.nn.Dropout(self.dropout_rnn_recurrent_f))
 
+            self.rnn_dropout_layers_input_b.append(
+                torch.nn.Dropout(self.dropout_rnn_input_b))
+            self.rnn_dropout_layers_recurrent_b.append(
+                torch.nn.Dropout(self.dropout_rnn_recurrent_b))
+
             setattr(self, 'rnn_layer_f_{}'.format(i+1), self.rnn_layers_f[-1])
             setattr(self, 'rnn_layer_b_{}'.format(i+1), self.rnn_layers_b[-1])
 
@@ -162,13 +172,14 @@ class CategoryBranch2(torch.nn.Module):
         output = output.permute(0, 2, 1, 3)
         o_size = output.size()
         output = output.resize(o_size[0], o_size[1], o_size[2] * o_size[3])
+        o_size = output.size()
 
-        for i in range(len(self.rnn_layers)):
-            h_f = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i]))
-            h_b = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i]))
+        for i in range(len(self.rnn_layers_f)):
+            h_f = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]))
+            h_b = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]))
 
             h_f[:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
-                self.rnn_dropout_layers_input_f[i](output[:, s_i, :]), h_f[:, 0, :]))
+                self.rnn_dropout_layers_input_f[i](output[:, 0, :]), h_f[:, 0, :]))
             h_b[:, 0, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
                 self.rnn_dropout_layers_input_b[i](output[:, -1, :]), h_b[:, 0, :]))
 
@@ -185,34 +196,60 @@ class CategoryBranch2(torch.nn.Module):
             output = h_f + h_b
             o_size = output.size()
             u_l = o_size[1]
-            u_l -= divmod(o_size[1], 2)[-1]
-            output = output[:, 0:u_l:2, :]
+            u_l -= divmod(o_size[1], self.rnn_subsamplings[i])[-1]
+            output = output[:, 0:u_l:self.rnn_subsamplings[i], :]
             o_size = output.size()
 
         return output
+
+    def nb_trainable_parameters(self):
+        s_1 = sum([
+            reduce(mul, layer.weight.size(), 1) for layer in
+            self.bn_layers + self.cnn_layers
+        ])
+        s_2 = sum([
+            reduce(mul, layer.weight_hh.size(), 1) for layer in
+            self.rnn_layers_f + self.rnn_layers_b
+        ])
+        s_3 = sum([
+            reduce(mul, layer.weight_ih.size(), 1) for layer in
+            self.rnn_layers_f + self.rnn_layers_b
+        ])
+        return s_1 + s_2 + s_3
 
 
 def main():
     from torch.autograd import Variable
     from torch.nn import functional
     x = Variable(
-        torch.rand(2, 1, 862, 192).float()
+        torch.rand(2, 40, 862, 192).float()
     )
 
+    nb_cnn_layers = 3
+
     b = CategoryBranch2(
-        cnn_channels_in=1,
-        cnn_channels_out=[40] * 4,
-        cnn_kernel_sizes=[(1, 3)] * 4,
-        cnn_strides=[(1, 2)] * 4,
-        cnn_paddings=[(0, 0)] * 4,
+        cnn_channels_in=40,
+        cnn_channels_out=[40] * nb_cnn_layers,
+        cnn_kernel_sizes=[(1, 3)] * nb_cnn_layers,
+        cnn_strides=[(1, 2)] * nb_cnn_layers,
+        cnn_paddings=[(0, 0)] * nb_cnn_layers,
         cnn_activations=functional.leaky_relu,
-        max_pool_kernels=[(3, 2)] * 4,
-        max_pool_strides=[(3, 2)] * 4,
-        max_pool_paddings=[(0, 0)] * 4,
+        max_pool_kernels=[(3, 2)] * nb_cnn_layers,
+        max_pool_strides=[(3, 2)] * nb_cnn_layers,
+        max_pool_paddings=[(0, 0)] * nb_cnn_layers,
         rnn_input_size=80,
         rnn_out_dims=[64] * 2,
-        rnn_activations=functional.tanh
+        rnn_activations=functional.tanh,
+        dropout_cnn=0.2,
+        dropout_rnn_input=0.2,
+        dropout_rnn_recurrent=0.2,
+        rnn_subsamplings=3
     )
+
+    y = b(x)
+
+    print(y.size())
+    print(b.nb_trainable_parameters())
 
 
 if __name__ == '__main__':

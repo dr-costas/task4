@@ -208,14 +208,11 @@ class CategoryBranch2(torch.nn.Module):
             self.bn_layers + self.cnn_layers
         ])
         s_2 = sum([
-            reduce(mul, layer.weight_hh.size(), 1) for layer in
-            self.rnn_layers_f + self.rnn_layers_b
-        ])
-        s_3 = sum([
+            reduce(mul, layer.weight_hh.size(), 1) +
             reduce(mul, layer.weight_ih.size(), 1) for layer in
             self.rnn_layers_f + self.rnn_layers_b
         ])
-        return s_1 + s_2 + s_3
+        return s_1 + s_2
 
 
 def main():

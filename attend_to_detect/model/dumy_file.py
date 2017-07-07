@@ -28,6 +28,30 @@ __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 
+alarm_classes = [
+    'Train horn',
+    'Air horn',
+    'Car alarm',
+    'Reversing beeps',
+    'Ambulance (siren)',
+    'Police car (siren)',
+    'fire truck (siren)',
+    'Civil defense siren',
+    'Screaming'
+]
+
+vehicle_classes = [
+    'Bicycle',
+    'Skateboard',
+    'Car',
+    'Car passing by',
+    'Bus',
+    'Truck',
+    'Motorcycle',
+    'Train'
+]
+
+
 # General variables
 batch_size = 64
 epochs = 300
@@ -90,18 +114,18 @@ branch_vehicle_rnn_subsamplings = [3]
 def padder(data):
     data = list(data)
     for index in [0, -2, -1]:
-        max_ts = np.max([datum.shape[0] for datum in data[index]])
+        max_ts = np.max([datum.shape[-2] for datum in data[index]])
 
         for i in range(len(data[index])):
-            len_dif = max_ts - data[index][i].shape[0]
+            len_dif = max_ts - data[index][i].shape[-2]
             if len_dif > 0:
                 data[index][i] = np.concatenate((
                     data[index][i],
-                    np.zeros((len_dif, data[index][i].shape[-1]))),
+                    np.zeros((1, len_dif, data[index][i].shape[-1]))),
                     axis=-2
                 )
                 if index != 0:
-                    data[index][i][-len_dif:, 0] = 1
+                    data[index][i][:, -len_dif:, 0] = 1
     data = tuple(data)
 
     return data
@@ -141,8 +165,16 @@ def get_output(data, old_dataset=True):
     if old_dataset:
         for i in range(len(data)):
             data[i] = data[i].reshape(data[i].shape[1:])
-    y = np.zeros((data.shape[0], ) + data[0].shape)
-    return Variable(torch.from_numpy(y).float())
+
+    y_one_hot = np.zeros((data.shape[0], ) + data[0].shape)
+    y_categorical = np.zeros((data.shape[0], ) + data[0].shape[0:1])
+
+    for i, datum in enumerate(data):
+        y_one_hot[i, :, :] = datum
+        y_categorical[i, :] = [a[-1] for a in datum.nonzero()]
+
+    return Variable(torch.from_numpy(y_one_hot).float()), \
+           Variable(torch.from_numpy(y_categorical).float())
 
 
 def main():
@@ -233,10 +265,10 @@ def main():
             x = get_input(batch[0], scaler)
 
             # Get target values for alarm classes
-            y_alarm = get_output(batch[-2])
+            y_alarm_1_hot, y_alarm_logits = get_output(batch[-2])
 
             # Get target values for vehicle classes
-            y_vehicle = get_output(batch[-1])
+            y_vehicle_1_hot, y_vehicle_logits = get_output(batch[-1])
 
             # Go through the common feature extractor
             common_features = common_feature_extractor(x)
@@ -259,10 +291,10 @@ def main():
             x = get_input(batch[0], scaler)
 
             # Get target values for alarm classes
-            y_alarm = get_output(batch[-2])
+            y_alarm_1_hot, y_alarm_logits = get_output(batch[-2])
 
             # Get target values for vehicle classes
-            y_vehicle = get_output(batch[-1])
+            y_vehicle_1_hot, y_vehicle_logits = get_output(batch[-1])
 
             # Go through the common feature extractor
             common_features = common_feature_extractor(x)

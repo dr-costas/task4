@@ -19,10 +19,10 @@ import numpy as np
 
 if sys.version_info < (3, 0):
     from .category_branch_2 import CategoryBranch2
-    from .common_feature_extarctor import CommonFeatureExtractor
+    from .common_feature_extractor import CommonFeatureExtractor
 else:
     from attend_to_detect.model.category_branch_2 import CategoryBranch2
-    from attend_to_detect.model.common_feature_extarctor import CommonFeatureExtractor
+    from attend_to_detect.model.common_feature_extractor import CommonFeatureExtractor
 
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
@@ -171,7 +171,9 @@ def get_output(data, old_dataset=True):
 
     for i, datum in enumerate(data):
         y_one_hot[i, :, :] = datum
-        y_categorical[i, :] = [a[-1] for a in datum.nonzero()]
+        non_zeros = [np.nonzero(dd) for dd in datum]
+        non_zeros = [n[0][0] for n in non_zeros]
+        y_categorical[i, :] = non_zeros
 
     return Variable(torch.from_numpy(y_one_hot).float()), \
            Variable(torch.from_numpy(y_categorical).float())

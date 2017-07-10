@@ -63,6 +63,7 @@ def total_cost(hiddens, targets):
     return category_cost(hiddens[0], targets[0]) + \
             category_cost(hiddens[1], targets[1])
 
+
 def padder(data):
     data = list(data)
     for index in [0, -2, -1]:
@@ -126,7 +127,9 @@ def get_output(data, old_dataset=True):
 
     for i, datum in enumerate(data):
         y_one_hot[i, :, :] = datum
-        y_categorical[i, :] = [a[-1] for a in datum.nonzero()]
+        non_zeros = [np.nonzero(dd) for dd in datum]
+        non_zeros = [n[0][0] for n in non_zeros]
+        y_categorical[i, :] = non_zeros
 
     y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
     y_categorical = Variable(torch.from_numpy(y_categorical).float(), requires_grad=False)
@@ -176,7 +179,9 @@ def main():
         dropout_cnn=config.branch_alarm_dropout_cnn,
         dropout_rnn_input=config.branch_alarm_dropout_rnn_input,
         dropout_rnn_recurrent=config.branch_alarm_dropout_rnn_recurrent,
-        rnn_subsamplings=config.branch_alarm_rnn_subsamplings
+        rnn_subsamplings=config.branch_alarm_rnn_subsamplings,
+        decoder_dim=config.branch_alarm_decoder_dim,
+        output_classes=len(alarm_classes)
     )
 
     # The vehicle branch layers
@@ -196,7 +201,9 @@ def main():
         dropout_cnn=config.branch_vehicle_dropout_cnn,
         dropout_rnn_input=config.branch_vehicle_dropout_rnn_input,
         dropout_rnn_recurrent=config.branch_vehicle_dropout_rnn_recurrent,
-        rnn_subsamplings=config.branch_vehicle_rnn_subsamplings
+        rnn_subsamplings=config.branch_vehicle_rnn_subsamplings,
+        decoder_dim=config.branch_vehicle_decoder_dim,
+        output_classes=len(vehicle_classes)
     )
 
     # Check if we have GPU, and if we do then GPU them all
@@ -225,7 +232,7 @@ def main():
             calculate_scaling_metrics=True)
         # Serialize scaler so we don't need to do this again
         with open('scaler.pkl', 'wb') as f:
-            pickle.dump(f, scaler)
+            pickle.dump(scaler, f)
 
     # Get the validation data stream
     valid_data, _ = get_data_stream(

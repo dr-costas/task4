@@ -12,10 +12,7 @@ from torch.autograd import Variable
 from torch.nn import GRUCell, Linear
 from torch.nn.functional import cross_entropy
 
-if sys.version_info > (3, 0):
-    from attend_to_detect.model.attention import GaussianAttention
-else:
-    from .attention import GaussianAttention
+from .attention import GaussianAttention
 
 
 class Encoder(nn.Module):

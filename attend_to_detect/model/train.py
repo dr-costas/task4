@@ -4,6 +4,8 @@
 # imports
 from __future__ import absolute_import
 import sys
+import os
+import pickle
 
 from fuel.datasets import H5PYDataset
 from fuel.schemes import ShuffledScheme
@@ -58,8 +60,8 @@ def category_cost(out_hidden, target):
 
 
 def total_cost(hiddens, targets):
-    return cross_entropy(hiddens[0], targets[0]) + \
-            cross_entropy(hiddens[1], targets[1])
+    return category_cost(hiddens[0], targets[0]) + \
+            category_cost(hiddens[1], targets[1])
 
 def padder(data):
     data = list(data)
@@ -203,17 +205,27 @@ def main():
         branch_alarm = branch_alarm.cuda()
         branch_vehicle = branch_vehicle.cuda()
 
-    # Create optimizers for all layers
+    # Create optimizer for all parameters
     params = []
     for block in (common_feature_extractor, branch_alarm, branch_vehicle):
         params += [p for p in block.parameters()]
     optim = torch.optim.Adam(params)
 
-    # Get the training data stream
-    train_data, scaler = get_data_stream(
-        dataset_name=config.dataset_full_path,
-        batch_size=config.batch_size
-    )
+    if os.path.isfile('scaler.pkl'):
+        with open('scaler.pkl', 'rb') as f:
+            scaler = pickle.load(f)
+        train_data, _ = get_data_stream(
+            dataset_name=config.dataset_full_path,
+            batch_size=config.batch_size,
+            calculate_scaling_metrics=False)
+    else:
+        train_data, scaler = get_data_stream(
+            dataset_name=config.dataset_full_path,
+            batch_size=config.batch_size,
+            calculate_scaling_metrics=True)
+        # Serialize scaler so we don't need to do this again
+        with open('scaler.pkl', 'wb') as f:
+            pickle.dump(f, scaler)
 
     # Get the validation data stream
     valid_data, _ = get_data_stream(
@@ -223,9 +235,9 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    for epoch in range(epochs):
+    for epoch in range(config.epochs):
 
-        for batch in train_data.get_epoch_iterator():
+        for iteration, batch in enumerate(train_data.get_epoch_iterator()):
             # Get input
             x = get_input(batch[0], scaler)
 
@@ -239,18 +251,23 @@ def main():
             common_features = common_feature_extractor(x)
 
             # Go through the alarm branch
-            alarm_output = branch_alarm(common_features)
+            alarm_output, alarm_weights = branch_alarm(common_features)
 
             # Go through the vehicle branch
-            vehicle_output = branch_vehicle(common_features)
-
-            # Zero out the grads in optimizers
-            common_feature_extractor.zero_grad()
-            branch_alarm.zero_grad()
-            branch_vehicle.zero_grad()
+            vehicle_output, vehicle_weights = branch_vehicle(common_features)
 
             # Calculate losses, do backward passing, and do updates
+            loss = total_cost((alarm_output, vehicle_output),
+                    (y_alarm_logits, y_vehicle_logits))
 
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            print('Epoch {}/it. {}: loss = {}'.format(epoch, iteration, loss))
+
+        valid_loss = 0.0
+        valid_batches = 0
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler)
@@ -265,12 +282,18 @@ def main():
             common_features = common_feature_extractor(x)
 
             # Go through the alarm branch
-            alarm_output = branch_alarm(common_features)
+            alarm_output, alarm_weights = branch_alarm(common_features)
 
             # Go through the vehicle branch
-            vehicle_output = branch_vehicle(common_features)
+            vehicle_output, vehicle_weights = branch_vehicle(common_features)
 
             # Calculate validation losses
+            valid_loss += total_cost((alarm_output, vehicle_output),
+                    (y_alarm_logits, y_vehicle_logits))
+            valid_batches += 1
+
+        print('Epoch {}: valid. loss = {}'.format(epoch, valid_loss/valid_batches))
+
 
 if __name__ == '__main__':
     main()

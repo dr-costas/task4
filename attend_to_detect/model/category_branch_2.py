@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # imports
@@ -6,6 +5,8 @@ from operator import mul
 from functools import reduce
 import torch
 from torch.autograd import Variable
+
+from attention import GaussianAttention
 
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
@@ -29,7 +30,8 @@ class CategoryBranch2(torch.nn.Module):
                  max_pool_kernels, max_pool_strides, max_pool_paddings,
                  rnn_input_size, rnn_out_dims, rnn_activations,
                  dropout_cnn, dropout_rnn_input, dropout_rnn_recurrent,
-                 rnn_subsamplings):
+                 rnn_subsamplings, decoder_dim, output_classes,
+                 monotonic_attention=False, attention_bias=False):
 
         super(CategoryBranch2, self).__init__()
 
@@ -63,6 +65,9 @@ class CategoryBranch2(torch.nn.Module):
         self.dropout_rnn_input_b = dropout_rnn_input
         self.dropout_rnn_recurrent_f = dropout_rnn_recurrent
         self.dropout_rnn_recurrent_b = dropout_rnn_recurrent
+
+        self.decoder_dim = decoder_dim
+        self.output_classes = output_classes
 
         all_cnn_have_proper_len = all([
             len(a) == cnn_len
@@ -118,12 +123,17 @@ class CategoryBranch2(torch.nn.Module):
             setattr(self, 'cnn_activation_{}'.format(i + 1), self.cnn_activations[i])
 
         for i in range(len(self.rnn_out_dims) - 1):
+            if i > 0:
+                # output of last layer was bidirectional, input is bigger
+                input_size = 2 * self.rnn_out_dims[i]
+            else:
+                input_size = self.rnn_out_dims[i]
             self.rnn_layers_f.append(torch.nn.GRUCell(
-                input_size=self.rnn_out_dims[i],
+                input_size=input_size,
                 hidden_size=self.rnn_out_dims[i + 1]
             ))
             self.rnn_layers_b.append(torch.nn.GRUCell(
-                input_size=self.rnn_out_dims[i],
+                input_size=input_size,
                 hidden_size=self.rnn_out_dims[i + 1]
             ))
             self.rnn_dropout_layers_input_f.append(
@@ -153,7 +163,22 @@ class CategoryBranch2(torch.nn.Module):
             setattr(self, 'rnn_activation_b_{}'.format(i + 1),
                     self.rnn_activations_b[i])
 
-    def forward(self, x):
+        # Adding attention layer
+        self.attention = GaussianAttention(dim=self.decoder_dim,
+                monotonic=monotonic_attention, bias=attention_bias)
+
+        self.decoder_cell = torch.nn.GRUCell(2*self.rnn_out_dims[-1], self.decoder_dim)
+        self.output_linear = torch.nn.Linear(self.decoder_dim, self.output_classes)
+
+
+    def get_initial_decoder_state(self, batch_size):
+        # TODO: smarter initial state
+        state = Variable(torch.zeros((batch_size, self.decoder_dim)))
+        #state = state.cuda()
+        return state
+
+
+    def forward(self, x, output_len):
 
         output = self.pooling_layers[0](self.bn_layers[0](
             self.cnn_activations[0](self.cnn_layers[0](
@@ -193,16 +218,31 @@ class CategoryBranch2(torch.nn.Module):
                     self.rnn_dropout_layers_recurrent_b[i](h_f[:, s_i - 1, :])
                 ))
 
-            output = h_f + h_b
+            output = torch.cat([h_f, h_b], -1)
             o_size = output.size()
             u_l = o_size[1]
             u_l -= divmod(o_size[1], self.rnn_subsamplings[i])[-1]
             output = output[:, 0:u_l:self.rnn_subsamplings[i], :]
             o_size = output.size()
 
-        return output
+        hidden = self.get_initial_decoder_state(o_size[0])
+        kappa = self.attention.get_initial_kappa(output)
+
+        out_hidden = []
+        out_weights = []
+
+        for i in range(output_len):
+            attended, weights, kappa = self.attention(hidden, output, kappa)
+            hidden = self.decoder_cell(attended, hidden)
+
+            out_hidden.append(self.output_linear(hidden).unsqueeze(1))
+            out_weights.append(weights)
+
+        return torch.cat(out_hidden, 1), out_weights
+
 
     def nb_trainable_parameters(self):
+        # FIXME: add attention parameters
         s_1 = sum([
             reduce(mul, layer.weight.size(), 1) for layer in
             self.bn_layers + self.cnn_layers
@@ -240,10 +280,12 @@ def main():
         dropout_cnn=0.2,
         dropout_rnn_input=0.2,
         dropout_rnn_recurrent=0.2,
-        rnn_subsamplings=3
+        rnn_subsamplings=3,
+        decoder_dim=32,
+        output_classes=10
     )
 
-    y = b(x)
+    y, weights = b(x, 3)
 
     print(y.size())
     print(b.nb_trainable_parameters())

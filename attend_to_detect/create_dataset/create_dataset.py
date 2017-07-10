@@ -27,7 +27,7 @@ else:
     testing_file_weak_labels = 'testing_set.csv'
     testing_file_strong_labels = 'groundtruth_strong_label_testing_set.csv'
 
-fuel_dataset_file = 'dcase_2017_task_4_test.hdf5'
+fuel_dataset_file = 'dcase_2017_task_4_test_old.hdf5'
 
 
 alarm_classes = [

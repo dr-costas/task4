@@ -55,8 +55,8 @@ vehicle_classes = [
 
 def category_cost(out_hidden, target):
     out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
-    target_flat = target.view(target.size(1))
-    return cross_entropy(out_hidden_flat, target_flat)
+    target_flat = target.view(-1)
+    return torch.nn.functional.cross_entropy(out_hidden_flat, target_flat)
 
 
 def total_cost(hiddens, targets):
@@ -104,14 +104,15 @@ def get_data_stream(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
     return stream, None
 
 
-def get_input(data, scaler, old_dataset=True):
+def get_input(data, scaler, old_dataset=True, volatile=False):
     if old_dataset:
         for i in range(len(data)):
             data[i] = data[i].reshape(data[i].shape[1:])
     x = np.zeros((data.shape[0], ) + data[0].shape)
     for i, datum in enumerate(data):
         x[i, :, :] = scaler.transform(datum)
-    x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float())
+    x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
+            volatile=volatile)
     if torch.has_cudnn:
         x = x.cuda()
     return x
@@ -132,7 +133,7 @@ def get_output(data, old_dataset=True):
         y_categorical[i, :] = non_zeros
 
     y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
-    y_categorical = Variable(torch.from_numpy(y_categorical).float(), requires_grad=False)
+    y_categorical = Variable(torch.from_numpy(y_categorical).long(), requires_grad=False)
     if torch.has_cudnn:
         y_one_hot = y_one_hot.cuda()
         y_categorical = y_categorical.cuda()
@@ -267,17 +268,17 @@ def main():
             loss = total_cost((alarm_output, vehicle_output),
                     (y_alarm_logits, y_vehicle_logits))
 
-            optimizer.zero_grad()
+            optim.zero_grad()
             loss.backward()
-            optimizer.step()
+            optim.step()
 
-            print('Epoch {}/it. {}: loss = {}'.format(epoch, iteration, loss))
+            print('Epoch {}/it. {}: loss = {}'.format(epoch, iteration, loss.data[0]))
 
         valid_loss = 0.0
         valid_batches = 0
         for batch in valid_data.get_epoch_iterator():
             # Get input
-            x = get_input(batch[0], scaler)
+            x = get_input(batch[0], scaler, volatile=True)
 
             # Get target values for alarm classes
             y_alarm_1_hot, y_alarm_logits = get_output(batch[-2])

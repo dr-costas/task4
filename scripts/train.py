@@ -3,6 +3,8 @@
 from __future__ import absolute_import
 import os
 import pickle
+import importlib
+from argparse import ArgumentParser
 
 import torch
 from torch.nn import functional
@@ -28,9 +30,6 @@ def total_cost(hiddens, targets):
 
 def main():
     # Getting configuration file from the command line argument
-    import importlib
-    from argparse import ArgumentParser
-
     parser = ArgumentParser()
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')

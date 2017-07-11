@@ -1,7 +1,7 @@
 from torch.nn import functional
 
 # General variables
-batch_size = 64
+batch_size = 8
 epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 

@@ -15,7 +15,7 @@ from fuel.transformers import Mapping
 import torch
 from torch.autograd import Variable
 from torch.nn import functional
-from torch.backends import cudnn
+import timeit
 
 from sklearn.preprocessing import StandardScaler
 import numpy as np
@@ -252,6 +252,7 @@ def main():
         branch_vehicle.train()
         losses_alarm = []
         losses_vehicle = []
+        epoch_start_time = timeit.timeit()
         for iteration, batch in enumerate(train_data.get_epoch_iterator()):
             # Get input
             x = get_input(batch[0], scaler)
@@ -283,8 +284,8 @@ def main():
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
 
-        print('Epoch {:4d}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
-            epoch, np.mean(losses_alarm), np.mean(losses_vehicle)))
+        print('Epoch {:4d} elapsed time {:10.5f}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
+            epoch, timeit.timeit() - epoch_start_time, np.mean(losses_alarm), np.mean(losses_vehicle)))
 
         common_feature_extractor.eval()
         branch_alarm.eval()
@@ -292,6 +293,7 @@ def main():
         valid_batches = 0
         loss_a = 0.0
         loss_v = 0.0
+        validation_start_time = timeit.timeit()
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler, volatile=True)
@@ -317,8 +319,10 @@ def main():
 
             valid_batches += 1
 
-        print('Epoch {:4d}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
-            epoch, loss_a/valid_batches, loss_v/valid_batches))
+        print('Epoch {:4d} validation elapsed time: {:10.5f}\n\t'
+              'Valid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+                epoch, timeit.timeit() - validation_start_time,
+                loss_a/valid_batches, loss_v/valid_batches))
 
 
 if __name__ == '__main__':

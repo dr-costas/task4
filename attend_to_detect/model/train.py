@@ -15,6 +15,7 @@ from fuel.transformers import Mapping
 import torch
 from torch.autograd import Variable
 from torch.nn import functional
+from torch.backends import cudnn
 
 from sklearn.preprocessing import StandardScaler
 import numpy as np
@@ -53,6 +54,7 @@ vehicle_classes = [
     'Train'
 ]
 
+
 def category_cost(out_hidden, target):
     out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
     target_flat = target.view(-1)
@@ -86,7 +88,7 @@ def padder(data):
 
 def get_data_stream(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
                     that_set='train', calculate_scaling_metrics=True, old_dataset=True):
-    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
+    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False, subset=slice(0, 10))
     scheme = ShuffledScheme(examples=dataset.num_examples, batch_size=batch_size)
 
     scaler = StandardScaler()
@@ -182,7 +184,7 @@ def main():
         dropout_rnn_recurrent=config.branch_alarm_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_alarm_rnn_subsamplings,
         decoder_dim=config.branch_alarm_decoder_dim,
-        output_classes=len(alarm_classes)
+        output_classes=len(alarm_classes) + 1
     )
 
     # The vehicle branch layers
@@ -204,7 +206,7 @@ def main():
         dropout_rnn_recurrent=config.branch_vehicle_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_vehicle_rnn_subsamplings,
         decoder_dim=config.branch_vehicle_decoder_dim,
-        output_classes=len(vehicle_classes)
+        output_classes=len(vehicle_classes) + 1
     )
 
     # Check if we have GPU, and if we do then GPU them all
@@ -215,9 +217,9 @@ def main():
 
     # Create optimizer for all parameters
     params = []
-    # for block in (common_feature_extractor, branch_alarm, branch_vehicle):
-    #     params += [p for p in block.parameters()]
-    # optim = torch.optim.Adam(params)
+    for block in (common_feature_extractor, branch_alarm, branch_vehicle):
+        params += [p for p in block.parameters()]
+    optim = torch.optim.Adam(params)
 
     if os.path.isfile('scaler.pkl'):
         with open('scaler.pkl', 'rb') as f:
@@ -243,12 +245,11 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    optim_common = torch.optim.Adam(common_feature_extractor.parameters())
-    optim_alarm = torch.optim.Adam(branch_alarm.parameters())
-    optim_vehicle = torch.optim.Adam(branch_vehicle.parameters())
-
     for epoch in range(config.epochs):
 
+        common_feature_extractor.train()
+        branch_alarm.train()
+        branch_vehicle.train()
         for iteration, batch in enumerate(train_data.get_epoch_iterator()):
             # Get input
             x = get_input(batch[0], scaler)
@@ -269,41 +270,23 @@ def main():
             vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
 
             # Calculate losses, do backward passing, and do updates
-            # loss = total_cost((alarm_output, vehicle_output),
-            #         (y_alarm_logits, y_vehicle_logits))
-
-            optim_common.zero_grad()
-            optim_alarm.zero_grad()
-            optim_vehicle.zero_grad()
-
             loss_a = category_cost(alarm_output, y_alarm_logits)
             loss_v = category_cost(vehicle_output, y_vehicle_logits)
+            loss = loss_a + loss_v
 
-            loss_a.backward(retain_variables=True)
-            optim_alarm.step()
-            optim_common.step()
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
 
-            optim_common.zero_grad()
-            optim_alarm.zero_grad()
-            optim_vehicle.zero_grad()
+            print('Epoch {}/it. {:4d}\n\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
+                epoch, iteration, loss_a.data[0], loss_v.data[0]))
 
-            loss_v.backward()
-            optim_vehicle.step()
-            optim_common.step()
-
-            # optim.zero_grad()
-            # loss_a.backward(retain_variables=True)
-            # optim.step()
-
-            # optim.zero_grad()
-            # loss_a.backward(retain_variables=True)
-            # optim.step()
-
-            print('Epoch {}/it. {}: loss alarm = {}'.format(epoch, iteration, loss_a.data[0]))
-            print('Epoch {}/it. {}: loss vehicle = {}'.format(epoch, iteration, loss_v.data[0]))
-
-        valid_loss = 0.0
+        common_feature_extractor.eval()
+        branch_alarm.eval()
+        branch_vehicle.eval()
         valid_batches = 0
+        loss_a = 0.0
+        loss_v = 0.0
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler, volatile=True)
@@ -318,17 +301,19 @@ def main():
             common_features = common_feature_extractor(x)
 
             # Go through the alarm branch
-            alarm_output, alarm_weights = branch_alarm(common_features)
+            alarm_output, alarm_weights = branch_alarm(common_features, y_alarm_logits.size(1))
 
             # Go through the vehicle branch
-            vehicle_output, vehicle_weights = branch_vehicle(common_features)
+            vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
 
             # Calculate validation losses
-            valid_loss += total_cost((alarm_output, vehicle_output),
-                    (y_alarm_logits, y_vehicle_logits))
+            loss_a += category_cost(alarm_output, y_alarm_logits).data[0]
+            loss_v += category_cost(vehicle_output, y_vehicle_logits).data[0]
+
             valid_batches += 1
 
-        print('Epoch {}: valid. loss = {}'.format(epoch, valid_loss/valid_batches))
+        print('Epoch {}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+            epoch, loss_a/valid_batches, loss_v/valid_batches))
 
 
 if __name__ == '__main__':

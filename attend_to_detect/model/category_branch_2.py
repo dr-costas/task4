@@ -6,7 +6,7 @@ from functools import reduce
 import torch
 from torch.autograd import Variable
 
-from .attention import GaussianAttention
+from attention import GaussianAttention
 
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
@@ -170,13 +170,12 @@ class CategoryBranch2(torch.nn.Module):
         self.decoder_cell = torch.nn.GRUCell(2*self.rnn_out_dims[-1], self.decoder_dim)
         self.output_linear = torch.nn.Linear(self.decoder_dim, self.output_classes)
 
-
     def get_initial_decoder_state(self, batch_size):
         # TODO: smarter initial state
         state = Variable(torch.zeros((batch_size, self.decoder_dim)))
-        state = state.cuda()
+        if torch.has_cudnn:
+            state = state.cuda()
         return state
-
 
     def forward(self, x, output_len):
 
@@ -199,31 +198,37 @@ class CategoryBranch2(torch.nn.Module):
         output = output.resize(o_size[0], o_size[1], o_size[2] * o_size[3])
         o_size = output.size()
 
-        h_s_f = []
-        h_s_b = []
-
         for i in range(len(self.rnn_layers_f)):
-            h_s_f.append(Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]).cuda()))
-            h_s_b.append(Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]).cuda()))
+            h_s_f = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]))
+            h_s_b = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]))
 
-            h_s_f[-1][:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
+            zeros_f = Variable(torch.zeros(o_size[0], self.rnn_out_dims[i+1]))
+            zeros_b = Variable(torch.zeros(o_size[0], self.rnn_out_dims[i+1]))
+
+            if torch.has_cudnn:
+                h_s_f = h_s_f.cuda()
+                h_s_b = h_s_b.cuda()
+                zeros_f = zeros_f.cuda()
+                zeros_b = zeros_b.cuda()
+
+            h_s_f[:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
                 self.rnn_dropout_layers_input_f[i](output[:, 0, :]),
-                Variable(torch.zeros(o_size[0], self.rnn_out_dims[i+1])).cuda()))
-            h_s_b[-1][:, 0, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
+                zeros_f))
+            h_s_b[:, 0, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
                 self.rnn_dropout_layers_input_b[i](output[:, -1, :]),
-                Variable(torch.zeros(o_size[0], self.rnn_out_dims[i+1])).cuda()))
+                zeros_b))
 
             for s_i in range(1, o_size[1]):
-                h_s_f[-1][:, s_i, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
+                h_s_f[:, s_i, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
                     self.rnn_dropout_layers_input_f[i](output[:, s_i, :]),
-                    self.rnn_dropout_layers_recurrent_f[i](h_s_f[-1][:, s_i - 1, :])
+                    self.rnn_dropout_layers_recurrent_f[i](h_s_f[:, s_i - 1, :])
                 ))
-                h_s_b[-1][:, s_i, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
+                h_s_b[:, s_i, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
                     self.rnn_dropout_layers_input_b[i](output[:, -(s_i + 1), :]),
-                    self.rnn_dropout_layers_recurrent_b[i](h_s_b[-1][:, s_i - 1, :])
+                    self.rnn_dropout_layers_recurrent_b[i](h_s_b[:, s_i - 1, :])
                 ))
 
-            output = torch.cat([h_s_f[-1], h_s_b[-1]], -1)
+            output = torch.cat([h_s_f, h_s_b], -1)
             o_size = output.size()
             u_l = o_size[1]
             u_l -= divmod(o_size[1], self.rnn_subsamplings[i])[-1]

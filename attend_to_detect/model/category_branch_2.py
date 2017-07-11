@@ -200,8 +200,8 @@ class CategoryBranch2(torch.nn.Module):
         o_size = output.size()
 
         for i in range(len(self.rnn_layers_f)):
-            h_f = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]))
-            h_b = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]))
+            h_f = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]).cuda())
+            h_b = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]).cuda())
 
             h_f[:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
                 self.rnn_dropout_layers_input_f[i](output[:, 0, :]), h_f[:, 0, :]))

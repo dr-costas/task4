@@ -54,15 +54,13 @@ class GaussianAttention(nn.Module):
     def get_initial_kappa(self, context):
         batch_size = context.size(0)
         kappa = Variable(torch.zeros(batch_size))
-        if self.is_cuda:
-            kappa = kappa.cuda()
+        kappa = kappa.cuda()
         return kappa
 
     def get_indexes(self, context):
         indexes = Variable(torch.arange(0, context.size(1)) / context.size(1),
                            requires_grad=False).unsqueeze(0)
-        if self.is_cuda:
-            indexes.cuda()
+        indexes.cuda()
         return indexes
 
     def forward(self, state, context, kappa_prev):
@@ -82,7 +80,7 @@ class GaussianAttention(nn.Module):
             # TODO: do we need mask?
             pass
         indexes = self.get_indexes(context)
-        indexes_exp = indexes.expand(kappa.size(0), indexes.size(1))
+        indexes_exp = indexes.expand(kappa.size(0), indexes.size(1)).cuda()
         beta_exp = beta.contiguous().view(beta.size(0), 1).expand_as(indexes_exp)
         kappa_exp = kappa.contiguous().view(kappa.size(0), 1).expand_as(indexes_exp)
         attn = torch.exp(-beta_exp * (kappa_exp - indexes_exp)**2)

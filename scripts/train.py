@@ -8,6 +8,7 @@ import numpy as np
 from contextlib import closing
 from argparse import ArgumentParser
 from mimir import Logger
+import timeit
 
 import torch
 from torch.nn import functional
@@ -148,6 +149,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         branch_vehicle.train()
         losses_alarm = []
         losses_vehicle = []
+        epoch_start_time = timeit.timeit()
         for iteration, batch in enumerate(train_data.get_epoch_iterator()):
             # Get input
             x = get_input(batch[0], scaler)
@@ -187,8 +189,10 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
 
             total_iterations += 1
 
-        print('Epoch {:4d}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
-            epoch, np.mean(losses_alarm), np.mean(losses_vehicle)))
+        print('Epoch {:4d} elapsed training time {:10.5f}'
+              '\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
+                epoch, epoch_start_time - timeit.timeit(),
+                np.mean(losses_alarm), np.mean(losses_vehicle)))
 
         common_feature_extractor.eval()
         branch_alarm.eval()
@@ -196,6 +200,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         valid_batches = 0
         loss_a = 0.0
         loss_v = 0.0
+        validation_start_time = timeit.timeit()
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler, volatile=True)
@@ -221,8 +226,10 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
 
             valid_batches += 1
 
-        print('Epoch {:4d}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
-            epoch, loss_a/valid_batches, loss_v/valid_batches))
+        print('Epoch {:4d} validation elapsed time {:10.5f}'
+              '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+                epoch, validation_start_time - timeit.timeit(),
+                loss_a/valid_batches, loss_v/valid_batches))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
                     'valid': {'alarm_loss': loss_a/valid_batches,

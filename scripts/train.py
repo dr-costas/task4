@@ -12,9 +12,7 @@ import timeit
 
 import torch
 from torch.nn import functional
-
-from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output, get_data_stream)
+from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, get_output, get_data_stream
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
 
 __author__ = 'Konstantinos Drossos - TUT'

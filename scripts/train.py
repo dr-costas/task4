@@ -5,7 +5,9 @@ import os
 import pickle
 import importlib
 import numpy as np
+from contextlib import closing
 from argparse import ArgumentParser
+from mimir import Logger
 
 import torch
 from torch.nn import functional
@@ -129,8 +131,17 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    for epoch in range(config.epochs):
+    logger = Logger("{}_log.jsonl.gz".format(), formatter=None)
+    with closing(logger):
+        train_loop(
+            config, common_feature_extractor, branch_vehicle, branch_alarm,
+            train_data, valid_data, scaler, optim, logger)
 
+
+def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
+               train_data, valid_data, scaler, optim, logger):
+    total_iterations = 0
+    for epoch in range(config.epochs):
         common_feature_extractor.train()
         branch_alarm.train()
         branch_vehicle.train()
@@ -166,6 +177,14 @@ def main():
 
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
+
+            if total_iterations % 10 == 0:
+                logger.log({'iteration': total_iterations,
+                            'epoch': epoch,
+                            'train': {'alarm_loss': loss_a.data[0],
+                                      'vehicle_loss': loss_v.data[0]}})
+
+            total_iterations += 1
 
         print('Epoch {:4d}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
             epoch, np.mean(losses_alarm), np.mean(losses_vehicle)))
@@ -203,6 +222,10 @@ def main():
 
         print('Epoch {:4d}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
             epoch, loss_a/valid_batches, loss_v/valid_batches))
+        logger.log({'iteration': total_iterations,
+                    'epoch': epoch,
+                    'valid': {'alarm_loss': loss_a/valid_batches,
+                              'vehicle_loss': loss_v/valid_batches}})
 
 
 if __name__ == '__main__':

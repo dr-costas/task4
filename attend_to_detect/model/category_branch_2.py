@@ -199,26 +199,31 @@ class CategoryBranch2(torch.nn.Module):
         output = output.resize(o_size[0], o_size[1], o_size[2] * o_size[3])
         o_size = output.size()
 
+        h_s_f = []
+        h_s_b = []
+
         for i in range(len(self.rnn_layers_f)):
             h_f = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]).cuda())
             h_b = Variable(torch.zeros(o_size[0], o_size[1], self.rnn_out_dims[i+1]).cuda())
 
-            h_f[:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
-                self.rnn_dropout_layers_input_f[i](output[:, 0, :]), h_f[:, 0, :]))
-            h_b[:, 0, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
-                self.rnn_dropout_layers_input_b[i](output[:, -1, :]), h_b[:, 0, :]))
+            h_s_f[-1][:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
+                self.rnn_dropout_layers_input_f[i](output[:, 0, :]),
+                Variable(torch.zeros(o_size[0], self.rnn_out_dims[i+1])).cuda()))
+            h_s_b[-1][:, 0, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
+                self.rnn_dropout_layers_input_b[i](output[:, -1, :]),
+                Variable(torch.zeros(o_size[0], self.rnn_out_dims[i+1])).cuda()))
 
             for s_i in range(1, o_size[1]):
-                h_f[:, s_i, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
+                h_s_f[-1][:, s_i, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
                     self.rnn_dropout_layers_input_f[i](output[:, s_i, :]),
-                    self.rnn_dropout_layers_recurrent_f[i](h_f[:, s_i - 1, :])
+                    self.rnn_dropout_layers_recurrent_f[i](h_s_f[-1][:, s_i - 1, :])
                 ))
-                h_b[:, s_i, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
+                h_s_b[-1][:, s_i, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
                     self.rnn_dropout_layers_input_b[i](output[:, -(s_i + 1), :]),
-                    self.rnn_dropout_layers_recurrent_b[i](h_f[:, s_i - 1, :])
+                    self.rnn_dropout_layers_recurrent_b[i](h_s_b[-1][:, s_i - 1, :])
                 ))
 
-            output = torch.cat([h_f, h_b], -1)
+            output = torch.cat([h_s_f[-1], h_s_b[-1]], -1)
             o_size = output.size()
             u_l = o_size[1]
             u_l -= divmod(o_size[1], self.rnn_subsamplings[i])[-1]

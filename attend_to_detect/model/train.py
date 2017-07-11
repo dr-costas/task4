@@ -20,8 +20,8 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 
 if sys.version_info < (3, 0):
-    from .category_branch_2 import CategoryBranch2
-    from .common_feature_extarctor import CommonFeatureExtractor
+    from category_branch_2 import CategoryBranch2
+    from common_feature_extractor import CommonFeatureExtractor
 else:
     from attend_to_detect.model.category_branch_2 import CategoryBranch2
     from attend_to_detect.model.common_feature_extractor import CommonFeatureExtractor

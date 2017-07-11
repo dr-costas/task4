@@ -6,7 +6,7 @@ from functools import reduce
 import torch
 from torch.autograd import Variable
 
-from attention import GaussianAttention
+from .attention import GaussianAttention
 
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'

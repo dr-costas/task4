@@ -287,7 +287,7 @@ def main():
             optim_alarm.zero_grad()
             optim_vehicle.zero_grad()
 
-            loss_v.backward(retain_variables=True)
+            loss_v.backward()
             optim_vehicle.step()
             optim_common.step()
 

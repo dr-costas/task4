@@ -174,7 +174,7 @@ class CategoryBranch2(torch.nn.Module):
     def get_initial_decoder_state(self, batch_size):
         # TODO: smarter initial state
         state = Variable(torch.zeros((batch_size, self.decoder_dim)))
-        #state = state.cuda()
+        state = state.cuda()
         return state
 
 

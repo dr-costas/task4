@@ -258,10 +258,10 @@ def main():
             common_features = common_feature_extractor(x)
 
             # Go through the alarm branch
-            alarm_output, alarm_weights = branch_alarm(common_features)
+            alarm_output, alarm_weights = branch_alarm(common_features, y_alarm_logits.size(1))
 
             # Go through the vehicle branch
-            vehicle_output, vehicle_weights = branch_vehicle(common_features)
+            vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
 
             # Calculate losses, do backward passing, and do updates
             loss = total_cost((alarm_output, vehicle_output),

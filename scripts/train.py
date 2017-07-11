@@ -130,7 +130,8 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    logger = Logger("{}_log.jsonl.gz".format(), formatter=None)
+    logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
+                    formatter=None)
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,

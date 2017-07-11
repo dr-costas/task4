@@ -250,6 +250,8 @@ def main():
         common_feature_extractor.train()
         branch_alarm.train()
         branch_vehicle.train()
+        losses_alarm = []
+        losses_vehicle = []
         for iteration, batch in enumerate(train_data.get_epoch_iterator()):
             # Get input
             x = get_input(batch[0], scaler)
@@ -278,8 +280,11 @@ def main():
             loss.backward()
             optim.step()
 
-            print('Epoch {}/it. {:4d}\n\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
-                epoch, iteration, loss_a.data[0], loss_v.data[0]))
+            losses_alarm.append(loss_a.data[0])
+            losses_vehicle.append(loss_v.data[0])
+
+        print('Epoch {:4d}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
+            epoch, np.mean(losses_alarm), np.mean(losses_vehicle)))
 
         common_feature_extractor.eval()
         branch_alarm.eval()

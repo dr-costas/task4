@@ -88,7 +88,7 @@ def padder(data):
 
 def get_data_stream(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
                     that_set='train', calculate_scaling_metrics=True, old_dataset=True):
-    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False, subset=slice(0, 10))
+    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
     scheme = ShuffledScheme(examples=dataset.num_examples, batch_size=batch_size)
 
     scaler = StandardScaler()

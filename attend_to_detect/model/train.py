@@ -215,9 +215,9 @@ def main():
 
     # Create optimizer for all parameters
     params = []
-    for block in (common_feature_extractor, branch_alarm, branch_vehicle):
-        params += [p for p in block.parameters()]
-    optim = torch.optim.Adam(params)
+    # for block in (common_feature_extractor, branch_alarm, branch_vehicle):
+    #     params += [p for p in block.parameters()]
+    # optim = torch.optim.Adam(params)
 
     if os.path.isfile('scaler.pkl'):
         with open('scaler.pkl', 'rb') as f:
@@ -243,6 +243,10 @@ def main():
         calculate_scaling_metrics=False,
     )
 
+    optim_common = torch.optim.Adam(common_feature_extractor.parameters())
+    optim_alarm = torch.optim.Adam(branch_alarm.parameters())
+    optim_vehicle = torch.optim.Adam(branch_vehicle.parameters())
+
     for epoch in range(config.epochs):
 
         for iteration, batch in enumerate(train_data.get_epoch_iterator()):
@@ -265,14 +269,38 @@ def main():
             vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
 
             # Calculate losses, do backward passing, and do updates
-            loss = total_cost((alarm_output, vehicle_output),
-                    (y_alarm_logits, y_vehicle_logits))
+            # loss = total_cost((alarm_output, vehicle_output),
+            #         (y_alarm_logits, y_vehicle_logits))
 
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+            optim_common.zero_grad()
+            optim_alarm.zero_grad()
+            optim_vehicle.zero_grad()
 
-            print('Epoch {}/it. {}: loss = {}'.format(epoch, iteration, loss.data[0]))
+            loss_a = category_cost(alarm_output, y_alarm_logits)
+            loss_v = category_cost(vehicle_output, y_vehicle_logits)
+
+            loss_a.backward(retain_variables=True)
+            optim_alarm.step()
+            optim_common.step()
+
+            optim_common.zero_grad()
+            optim_alarm.zero_grad()
+            optim_vehicle.zero_grad()
+
+            loss_v.backward(retain_variables=True)
+            optim_vehicle.step()
+            optim_common.step()
+
+            # optim.zero_grad()
+            # loss_a.backward(retain_variables=True)
+            # optim.step()
+
+            # optim.zero_grad()
+            # loss_a.backward(retain_variables=True)
+            # optim.step()
+
+            print('Epoch {}/it. {}: loss alarm = {}'.format(epoch, iteration, loss_a.data[0]))
+            print('Epoch {}/it. {}: loss vehicle = {}'.format(epoch, iteration, loss_v.data[0]))
 
         valid_loss = 0.0
         valid_batches = 0

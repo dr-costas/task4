@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import os
 import pickle
 import importlib
+import numpy as np
 from argparse import ArgumentParser
 
 import torch

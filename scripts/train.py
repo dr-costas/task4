@@ -1,58 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-# imports
 from __future__ import absolute_import
-import sys
 import os
 import pickle
-
-from fuel.datasets import H5PYDataset
-from fuel.schemes import ShuffledScheme
-from fuel.streams import DataStream
-from fuel.transformers import Mapping
+import importlib
+import numpy as np
+from contextlib import closing
+from argparse import ArgumentParser
+from mimir import Logger
 
 import torch
-from torch.autograd import Variable
 from torch.nn import functional
-import timeit
 
-from sklearn.preprocessing import StandardScaler
-import numpy as np
-
-if sys.version_info < (3, 0):
-    from category_branch_2 import CategoryBranch2
-    from common_feature_extractor import CommonFeatureExtractor
-else:
-    from attend_to_detect.model.category_branch_2 import CategoryBranch2
-    from attend_to_detect.model.common_feature_extractor import CommonFeatureExtractor
+from attend_to_detect.dataset import (
+    vehicle_classes, alarm_classes, get_input, get_output, get_data_stream)
+from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
 
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
-
-
-alarm_classes = [
-    'Train horn',
-    'Air horn',
-    'Car alarm',
-    'Reversing beeps',
-    'Ambulance (siren)',
-    'Police car (siren)',
-    'fire truck (siren)',
-    'Civil defense siren',
-    'Screaming'
-]
-
-vehicle_classes = [
-    'Bicycle',
-    'Skateboard',
-    'Car',
-    'Car passing by',
-    'Bus',
-    'Truck',
-    'Motorcycle',
-    'Train'
-]
 
 
 def category_cost(out_hidden, target):
@@ -66,87 +31,8 @@ def total_cost(hiddens, targets):
             category_cost(hiddens[1], targets[1])
 
 
-def padder(data):
-    data = list(data)
-    for index in [0, -2, -1]:
-        max_ts = np.max([datum.shape[-2] for datum in data[index]])
-
-        for i in range(len(data[index])):
-            len_dif = max_ts - data[index][i].shape[-2]
-            if len_dif > 0:
-                data[index][i] = np.concatenate((
-                    data[index][i],
-                    np.zeros((1, len_dif, data[index][i].shape[-1]))),
-                    axis=-2
-                )
-                if index != 0:
-                    data[index][i][:, -len_dif:, 0] = 1
-    data = tuple(data)
-
-    return data
-
-
-def get_data_stream(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
-                    that_set='train', calculate_scaling_metrics=True, old_dataset=True):
-    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
-    scheme = ShuffledScheme(examples=dataset.num_examples, batch_size=batch_size)
-
-    scaler = StandardScaler()
-
-    stream = DataStream(dataset=dataset, iteration_scheme=scheme)
-    stream = Mapping(stream, mapping=padder)
-
-    if calculate_scaling_metrics:
-        for data in stream.get_epoch_iterator():
-            for example in data[0]:
-                if old_dataset:
-                    scaler.partial_fit(example.reshape(example.shape[1:]))
-
-        return stream, scaler
-    return stream, None
-
-
-def get_input(data, scaler, old_dataset=True, volatile=False):
-    if old_dataset:
-        for i in range(len(data)):
-            data[i] = data[i].reshape(data[i].shape[1:])
-    x = np.zeros((data.shape[0], ) + data[0].shape)
-    for i, datum in enumerate(data):
-        x[i, :, :] = scaler.transform(datum)
-    x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
-            volatile=volatile)
-    if torch.has_cudnn:
-        x = x.cuda()
-    return x
-
-
-def get_output(data, old_dataset=True):
-    if old_dataset:
-        for i in range(len(data)):
-            data[i] = data[i].reshape(data[i].shape[1:])
-
-    y_one_hot = np.zeros((data.shape[0], ) + data[0].shape)
-    y_categorical = np.zeros((data.shape[0], ) + data[0].shape[0:1])
-
-    for i, datum in enumerate(data):
-        y_one_hot[i, :, :] = datum
-        non_zeros = [np.nonzero(dd) for dd in datum]
-        non_zeros = [n[0][0] for n in non_zeros]
-        y_categorical[i, :] = non_zeros
-
-    y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
-    y_categorical = Variable(torch.from_numpy(y_categorical).long(), requires_grad=False)
-    if torch.has_cudnn:
-        y_one_hot = y_one_hot.cuda()
-        y_categorical = y_categorical.cuda()
-    return y_one_hot, y_categorical
-
-
 def main():
     # Getting configuration file from the command line argument
-    import importlib
-    from argparse import ArgumentParser
-
     parser = ArgumentParser()
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
@@ -245,14 +131,22 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    for epoch in range(config.epochs):
+    logger = Logger("{}_log.jsonl.gz".format(), formatter=None)
+    with closing(logger):
+        train_loop(
+            config, common_feature_extractor, branch_vehicle, branch_alarm,
+            train_data, valid_data, scaler, optim, logger)
 
+
+def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
+               train_data, valid_data, scaler, optim, logger):
+    total_iterations = 0
+    for epoch in range(config.epochs):
         common_feature_extractor.train()
         branch_alarm.train()
         branch_vehicle.train()
         losses_alarm = []
         losses_vehicle = []
-        epoch_start_time = timeit.timeit()
         for iteration, batch in enumerate(train_data.get_epoch_iterator()):
             # Get input
             x = get_input(batch[0], scaler)
@@ -284,8 +178,16 @@ def main():
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
 
-        print('Epoch {:4d} elapsed time {:10.5f}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
-            epoch, timeit.timeit() - epoch_start_time, np.mean(losses_alarm), np.mean(losses_vehicle)))
+            if total_iterations % 10 == 0:
+                logger.log({'iteration': total_iterations,
+                            'epoch': epoch,
+                            'train': {'alarm_loss': loss_a.data[0],
+                                      'vehicle_loss': loss_v.data[0]}})
+
+            total_iterations += 1
+
+        print('Epoch {:4d}\tLosses: alarm: {:10.6f} | vehicle: {:10.6f}'.format(
+            epoch, np.mean(losses_alarm), np.mean(losses_vehicle)))
 
         common_feature_extractor.eval()
         branch_alarm.eval()
@@ -293,7 +195,6 @@ def main():
         valid_batches = 0
         loss_a = 0.0
         loss_v = 0.0
-        validation_start_time = timeit.timeit()
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler, volatile=True)
@@ -319,13 +220,13 @@ def main():
 
             valid_batches += 1
 
-        print('Epoch {:4d} validation elapsed time: {:10.5f}\n\t'
-              'Valid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
-                epoch, timeit.timeit() - validation_start_time,
-                loss_a/valid_batches, loss_v/valid_batches))
+        print('Epoch {:4d}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+            epoch, loss_a/valid_batches, loss_v/valid_batches))
+        logger.log({'iteration': total_iterations,
+                    'epoch': epoch,
+                    'valid': {'alarm_loss': loss_a/valid_batches,
+                              'vehicle_loss': loss_v/valid_batches}})
 
 
 if __name__ == '__main__':
     main()
-
-# EOF

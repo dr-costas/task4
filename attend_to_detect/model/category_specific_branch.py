@@ -78,7 +78,8 @@ class CategoryBranch(nn.Module):
 
     def get_initial_state(self, input_, context):
         # TODO: smarter initial state
-        state = Variable(torch.zeros((input_.size(0), self.decoder_dim)))
+        state = Variable(torch.zeros((input_.size(0), self.decoder_dim)),
+                         requires_grad=False)
         if self.is_cuda:
             state = state.cuda()
         return state

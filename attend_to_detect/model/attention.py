@@ -66,7 +66,7 @@ class GaussianAttention(nn.Module):
         return indexes
 
     def forward(self, state, context, kappa_prev):
-        ""  "
+        """
         input: batch x dim
         context: batch x sourceL x dim
         """

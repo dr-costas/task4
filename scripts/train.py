@@ -8,6 +8,7 @@ import numpy as np
 from contextlib import closing
 from argparse import ArgumentParser
 from mimir import Logger
+from tqdm import tqdm
 import timeit
 
 import torch
@@ -148,7 +149,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         losses_alarm = []
         losses_vehicle = []
         epoch_start_time = timeit.timeit()
-        for iteration, batch in enumerate(train_data.get_epoch_iterator()):
+        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()), total=50000):
             # Get input
             x = get_input(batch[0], scaler)
 

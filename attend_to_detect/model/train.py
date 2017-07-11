@@ -312,7 +312,7 @@ def main():
 
             valid_batches += 1
 
-        print('Epoch {}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+        print('Epoch {:4d}\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
             epoch, loss_a/valid_batches, loss_v/valid_batches))
 
 

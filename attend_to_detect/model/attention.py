@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.nn.functional import tanh, softmax
+from torch.nn.init import xavier_normal, constant
 
 
 class ContentAttention(nn.Module):
@@ -42,6 +43,12 @@ class GaussianAttention(nn.Module):
         self.linear_in = nn.Linear(dim, 2, bias=bias)
         self.mask = None
         self.monotonic = monotonic
+
+        self.initialize()
+
+    def initialize(self):
+        xavier_normal(self.linear_in.weight.data)
+        constant(self.linear_in.bias.data, 0)
 
     @property
     def is_cuda(self):

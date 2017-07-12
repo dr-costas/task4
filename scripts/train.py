@@ -42,6 +42,7 @@ def main():
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
     parser.add_argument('--visdom', action='store_true')
+    parser.add_argument('--visdom-port', type=int)
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -172,7 +173,7 @@ def main():
             'loss',
             dict(title='Train/valid alarm loss',
                  xlabel='iteration',
-                 ylabel='cross-entropy'))
+                 ylabel='cross-entropy'), port=args.visdom_port)
         logger.handlers.append(visdom_handler)
     with closing(logger):
         train_loop(

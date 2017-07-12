@@ -10,6 +10,7 @@ from argparse import ArgumentParser
 from mimir import Logger
 from tqdm import tqdm
 import timeit
+import shutil
 
 import torch
 from torch.nn import functional
@@ -34,6 +35,7 @@ def total_cost(hiddens, targets):
 def main():
     # Getting configuration file from the command line argument
     parser = ArgumentParser()
+    parser.add_argument('--train_examples', type=int, default=-1)
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
     args = parser.parse_args()
@@ -107,18 +109,39 @@ def main():
         params += [p for p in block.parameters()]
     optim = torch.optim.Adam(params)
 
+    # Do we have a checkpoint?
+    if os.path.isfile(args.checkpoint_path):
+        print('Checkpoint directory exists!')
+        if os.path.isfile(os.path.join(checkpoint_path, 'latest.pt')):
+            print('Loading checkpoint...')
+            ckpt = torch.load(os.path.join(checkpoint_path, 'latest.pt'))
+            common_feature_extractor.load_state_dict(ckpt['common_feature_extractor'])
+            branch_alarm.load_state_dict(ckpt['branch_alarm'])
+            branch_vehicle.load_state_dict(ckpt['branch_vehicle'])
+            optim.load_state_dict(ckpt['optim'])
+    else:
+        print('Checkpoint directory does not exist, creating...')
+        os.makedirs(args.checkpoint_path)
+
+    if args.train_examples == -1:
+        examples = None
+    else:
+        examples = args.train_examples
+
     if os.path.isfile('scaler.pkl'):
         with open('scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
         train_data, _ = get_data_stream(
             dataset_name=config.dataset_full_path,
             batch_size=config.batch_size,
-            calculate_scaling_metrics=False)
+            calculate_scaling_metrics=False,
+            examples=examples)
     else:
         train_data, scaler = get_data_stream(
             dataset_name=config.dataset_full_path,
             batch_size=config.batch_size,
-            calculate_scaling_metrics=True)
+            calculate_scaling_metrics=True,
+            examples=examples)
         # Serialize scaler so we don't need to do this again
         with open('scaler.pkl', 'wb') as f:
             pickle.dump(scaler, f)
@@ -183,8 +206,8 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             if total_iterations % 10 == 0:
                 logger.log({'iteration': total_iterations,
                             'epoch': epoch,
-                            'train': {'alarm_loss': loss_a.data[0],
-                                      'vehicle_loss': loss_v.data[0]}})
+                            'train': {'alarm_loss': np.mean(losses_alarm),
+                                      'vehicle_loss': np.mean(losses_vehicle)}})
 
             total_iterations += 1
 
@@ -233,6 +256,14 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                     'epoch': epoch,
                     'valid': {'alarm_loss': loss_a/valid_batches,
                               'vehicle_loss': loss_v/valid_batches}})
+        # Checkpoint
+        ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
+                'branch_alarm': branch_alarm.state_dict(),
+                'branch_vehicle': branch_vehicle.state_dict(),
+                'optim': optim.state_dict()}
+        torch.save(ckpt, os.path.join(args.checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
+        shutil.copyfile(os.path.join(args.checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
+                os.path.join(args.checkpoint_path, 'latest.pt'))
 
 
 if __name__ == '__main__':

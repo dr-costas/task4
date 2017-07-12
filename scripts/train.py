@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 import os
 import pickle
 import importlib
 import numpy as np
-from contextlib import closing
+import timeit
 from argparse import ArgumentParser
+from contextlib import closing
+from itertools import chain
 from mimir import Logger
 from tqdm import tqdm
 import timeit
@@ -38,6 +39,7 @@ def main():
     parser.add_argument('--train_examples', type=int, default=-1)
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
+    parser.add_argument('--print-grads', action='store_true')
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -72,7 +74,8 @@ def main():
         dropout_rnn_recurrent=config.branch_alarm_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_alarm_rnn_subsamplings,
         decoder_dim=config.branch_alarm_decoder_dim,
-        output_classes=len(alarm_classes) + 1
+        output_classes=len(alarm_classes) + 1,
+        attention_bias=config.branch_alarm_attention_bias
     )
 
     # The vehicle branch layers
@@ -94,7 +97,8 @@ def main():
         dropout_rnn_recurrent=config.branch_vehicle_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_vehicle_rnn_subsamplings,
         decoder_dim=config.branch_vehicle_decoder_dim,
-        output_classes=len(vehicle_classes) + 1
+        output_classes=len(vehicle_classes) + 1,
+        attention_bias=config.branch_vehicle_attention_bias
     )
 
     # Check if we have GPU, and if we do then GPU them all
@@ -159,11 +163,22 @@ def main():
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
-            train_data, valid_data, scaler, optim, logger)
+            train_data, valid_data, scaler, optim, args.print_grads, logger)
+
+
+def iterate_params(module):
+    has_children = False
+    for child in module.children():
+        for pair in iterate_params(child):
+            yield pair
+        has_children = True
+    if not has_children:
+        for name, parameter in module.named_parameters():
+            yield (parameter, name, module)
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
-               train_data, valid_data, scaler, optim, logger):
+               train_data, valid_data, scaler, optim, print_grads, logger):
     total_iterations = 0
     for epoch in range(config.epochs):
         common_feature_extractor.train()
@@ -199,6 +214,14 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             optim.zero_grad()
             loss.backward()
             optim.step()
+
+            if print_grads:
+                for param, name, module in chain(iterate_params(common_feature_extractor),
+                                                 iterate_params(branch_alarm),
+                                                 iterate_params(branch_vehicle)):
+                    print("{}\t\t {}\t\t: grad norm {}\t\t weight norm {}".format(
+                        name, str(module), param.grad.norm(2).data[0],
+                        param.norm(2).data[0]))
 
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])

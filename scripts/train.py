@@ -5,8 +5,9 @@ import pickle
 import importlib
 import numpy as np
 import timeit
-from contextlib import closing
 from argparse import ArgumentParser
+from contextlib import closing
+from itertools import chain
 from mimir import Logger
 from tqdm import tqdm
 
@@ -138,6 +139,17 @@ def main():
             train_data, valid_data, scaler, optim, logger)
 
 
+def iterate_params(module):
+    has_children = False
+    for child in module.children():
+        for pair in iterate_params(child):
+            yield pair
+        has_children = True
+    if not has_children:
+        for parameter in module.parameters():
+            yield (parameter, module)
+
+
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                train_data, valid_data, scaler, optim, logger):
     total_iterations = 0
@@ -175,6 +187,14 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             optim.zero_grad()
             loss.backward()
             optim.step()
+
+            for param, module in chain(iterate_params(common_feature_extractor),
+                                       iterate_params(branch_alarm),
+                                       iterate_params(branch_vehicle)):
+                print("{}\t: grad norm {}\t weight norm {}".format(
+                    str(module), param.grad.norm(2).data[0],
+                    param.norm(2).data[0]))
+
 
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])

@@ -4,7 +4,6 @@
 # imports
 
 
-__author__ = 'Konstantinos Drossos -- TUT'
 __docformat__ = 'reStructuredText'
 
 

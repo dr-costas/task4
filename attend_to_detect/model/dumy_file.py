@@ -24,7 +24,6 @@ else:
     from attend_to_detect.model.category_branch_2 import CategoryBranch2
     from attend_to_detect.model.common_feature_extractor import CommonFeatureExtractor
 
-__author__ = 'Konstantinos Drossos - TUT | Joao Santos - MILA | Dmitriy Serdyuk - MILA'
 __docformat__ = 'reStructuredText'
 
 

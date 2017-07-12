@@ -148,8 +148,8 @@ def iterate_params(module):
             yield pair
         has_children = True
     if not has_children:
-        for parameter in module.parameters():
-            yield (parameter, module)
+        for parameter in module.named_parameters():
+            yield (parameter, name, module)
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -190,13 +190,12 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             loss.backward()
             optim.step()
 
-            for param, module in chain(iterate_params(common_feature_extractor),
-                                       iterate_params(branch_alarm),
-                                       iterate_params(branch_vehicle)):
-                print("{}\t: grad norm {}\t weight norm {}".format(
-                    str(module), param.grad.norm(2).data[0],
+            for param, name, module in chain(iterate_params(common_feature_extractor),
+                                             iterate_params(branch_alarm),
+                                             iterate_params(branch_vehicle)):
+                print("{}\t\t {}\t\t: grad norm {}\t\t weight norm {}".format(
+                    name, str(module), param.grad.norm(2).data[0],
                     param.norm(2).data[0]))
-
 
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])

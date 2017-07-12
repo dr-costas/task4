@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 import os
 import pickle
 import importlib
 import numpy as np
+import timeit
 from contextlib import closing
 from argparse import ArgumentParser
 from mimir import Logger
 from tqdm import tqdm
-import timeit
 
 import torch
 from torch.nn import functional

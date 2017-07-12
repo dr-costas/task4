@@ -40,7 +40,6 @@ class GaussianAttention(nn.Module):
     def __init__(self, dim, monotonic=False, bias=False):
         super(GaussianAttention, self).__init__()
         self.linear_in = nn.Linear(dim, 2, bias=bias)
-        self.linear_out = nn.Linear(dim * 2, dim, bias=bias)
         self.mask = None
         self.monotonic = monotonic
 
@@ -61,7 +60,7 @@ class GaussianAttention(nn.Module):
     def get_indexes(self, context):
         indexes = Variable(torch.arange(0, context.size(1)) / context.size(1),
                            requires_grad=False).unsqueeze(0)
-        if torch.has_cudnn:
+        if self.is_cuda:
             indexes.cuda()
         return indexes
 

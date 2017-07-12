@@ -3,6 +3,7 @@
 
 # imports
 import sed_eval
+import numpy as np
 
 
 __author__ = 'Konstantinos Drossos -- TUT'
@@ -50,7 +51,7 @@ def calculate_sed_metrics(y_ped_dict, y_true_dict):
     pass
 
 
-def calculate_tagging_metrics(y_pred_dict, y_true_dict, all_labels, file_prefix=''):
+def tagging_metrics_from_dictionaries(y_pred_dict, y_true_dict, all_labels, file_prefix=''):
     """
 
     :param y_pred_dict:
@@ -94,11 +95,61 @@ def calculate_tagging_metrics(y_pred_dict, y_true_dict, all_labels, file_prefix=
     return segment_based_metrics
 
 
+def tagging_metrics_from_raw_output(y_pred, y_true, all_labels, y_true_is_categorical=True):
+    """
+
+    If 1-hot-encoding, the value [1, 0, 0, ..., 0] is considered <EOS>. \
+    If not 1-hot-encoded, the value 0 is considered <EOS>.
+
+    :param y_pred: List with predictions, of len = nb_files and each element \
+                   is a matrix of size [nb_events_detected x nb_labels]
+    :type y_pred: list[numpy.core.multiarray.ndarray]
+    :param y_true: List with true values, of len = nb_files. If 1-hot-enconding \
+                   each element is a matrix of size [nb_events x nb_labels] . \
+                   Else, each element is an array of len = nb_events.
+    :type y_true: list[numpy.core.multiarray.ndarray]
+    :param all_labels: A list with all the labels **including** the <EOS> at the 0th index
+    :type all_labels: list[str]
+    :param y_true_is_categorical: Indication if y_true is categorical
+    :type y_true_is_categorical: bool
+    :return:
+    :rtype:
+    """
+    def get_data(the_data, the_labels, is_categorical):
+
+        dict_to_return = {}
+        for i, file_data in enumerate(the_data):
+            found_eos = False
+            event_labels = []
+            for event_data in file_data:
+                if is_categorical:
+                    index = event_data
+                else:
+                    index = np.argmax(event_data)
+
+                if index == 0 and not found_eos:
+                    found_eos = True
+                elif index == 0 and found_eos:
+                    break
+
+                event_labels.append(the_labels[np.argmax(event_data)])
+
+            dict_f = {e: [0.00, 10.00] for e in event_labels}
+            dict_to_return.update({
+                i: dict_f
+            })
+
+        return dict_to_return
+
+    data_pred = get_data(y_pred, all_labels, False)
+    data_true = get_data(y_true, all_labels, y_true_is_categorical)
+
+    return tagging_metrics_from_dictionaries(data_pred, data_true, all_labels)
+
+
 def main():
     labels = ['car', 'bus', 'truck', 'bike']
     nb_files = 10
-
-    import numpy as np
 
     pred_indices = np.random.randint(0, len(labels), nb_files)
     true_indices = np.random.randint(0, len(labels), nb_files)
@@ -114,7 +165,18 @@ def main():
             i: {labels[i_true]: [0.00, 10.00]}
         })
 
-    print(calculate_tagging_metrics(dict_pred, dict_true, labels))
+    print(tagging_metrics_from_dictionaries(dict_pred, dict_true, labels))
+
+    x = np.random.random((nb_files, 3, len(labels)))
+    y_categorical = np.random.randint(0, len(labels), (nb_files, 3))
+    y_1_hot = np.zeros((nb_files, 3, len(labels)))
+    for i in range(nb_files):
+        for ii in range(3):
+            random_col = np.random.randint(0, len(labels))
+            y_1_hot[i, ii, random_col] = 1
+
+    print(tagging_metrics_from_raw_output(x, y_categorical, labels, y_true_is_categorical=True))
+    print(tagging_metrics_from_raw_output(x, y_1_hot, labels, y_true_is_categorical=False))
 
 
 if __name__ == '__main__':

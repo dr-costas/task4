@@ -32,7 +32,7 @@ class CategoryBranch2(torch.nn.Module):
                  rnn_input_size, rnn_out_dims, rnn_activations,
                  dropout_cnn, dropout_rnn_input, dropout_rnn_recurrent,
                  rnn_subsamplings, decoder_dim, output_classes,
-                 monotonic_attention=False, attention_bias=False):
+                 monotonic_attention=False, attention_bias=True):
 
         super(CategoryBranch2, self).__init__()
 
@@ -165,8 +165,9 @@ class CategoryBranch2(torch.nn.Module):
                     self.rnn_activations_b[i])
 
         # Adding attention layer
-        self.attention = GaussianAttention(dim=self.decoder_dim,
-                monotonic=monotonic_attention, bias=attention_bias)
+        self.attention = GaussianAttention(
+            dim=self.decoder_dim,
+            monotonic=monotonic_attention, bias=attention_bias)
 
         self.decoder_cell = torch.nn.GRUCell(2*self.rnn_out_dims[-1], self.decoder_dim)
         self.output_linear = torch.nn.Linear(self.decoder_dim, self.output_classes)

@@ -37,6 +37,7 @@ branch_alarm_dropout_rnn_recurrent = 0.2
 branch_alarm_rnn_subsamplings = [3]
 
 branch_alarm_decoder_dim = 32
+branch_alarm_attention_bias = True
 
 # Variables needed for the vehicle branch
 branch_vehicle_channels_out = [40, 40, 40]
@@ -60,4 +61,4 @@ branch_vehicle_dropout_rnn_recurrent = 0.2
 branch_vehicle_rnn_subsamplings = [3]
 
 branch_vehicle_decoder_dim = 32
-
+branch_vehicle_attention_bias = True

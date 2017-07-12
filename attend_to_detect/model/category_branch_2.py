@@ -7,7 +7,7 @@ import torch
 from torch.autograd import Variable
 from torch.nn.init import xavier_normal, constant
 
-from attention import GaussianAttention
+from .attention import GaussianAttention
 
 __author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'

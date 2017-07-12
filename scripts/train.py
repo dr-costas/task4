@@ -114,11 +114,11 @@ def main():
     optim = torch.optim.Adam(params)
 
     # Do we have a checkpoint?
-    if os.path.isfile(args.checkpoint_path):
+    if os.path.isdir(args.checkpoint_path):
         print('Checkpoint directory exists!')
-        if os.path.isfile(os.path.join(checkpoint_path, 'latest.pt')):
+        if os.path.isfile(os.path.join(args.checkpoint_path, 'latest.pt')):
             print('Loading checkpoint...')
-            ckpt = torch.load(os.path.join(checkpoint_path, 'latest.pt'))
+            ckpt = torch.load(os.path.join(args.checkpoint_path, 'latest.pt'))
             common_feature_extractor.load_state_dict(ckpt['common_feature_extractor'])
             branch_alarm.load_state_dict(ckpt['branch_alarm'])
             branch_vehicle.load_state_dict(ckpt['branch_vehicle'])
@@ -163,7 +163,8 @@ def main():
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
-            train_data, valid_data, scaler, optim, args.print_grads, logger)
+            train_data, valid_data, scaler, optim, args.print_grads, logger,
+            args.checkpoint_path)
 
 
 def iterate_params(module):
@@ -178,7 +179,8 @@ def iterate_params(module):
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
-               train_data, valid_data, scaler, optim, print_grads, logger):
+               train_data, valid_data, scaler, optim, print_grads, logger,
+               checkpoint_path):
     total_iterations = 0
     for epoch in range(config.epochs):
         common_feature_extractor.train()
@@ -284,9 +286,9 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 'branch_alarm': branch_alarm.state_dict(),
                 'branch_vehicle': branch_vehicle.state_dict(),
                 'optim': optim.state_dict()}
-        torch.save(ckpt, os.path.join(args.checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
-        shutil.copyfile(os.path.join(args.checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
-                os.path.join(args.checkpoint_path, 'latest.pt'))
+        torch.save(ckpt, os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
+        shutil.copyfile(os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
+                os.path.join(checkpoint_path, 'latest.pt'))
 
 
 if __name__ == '__main__':

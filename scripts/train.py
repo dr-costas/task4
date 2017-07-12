@@ -252,7 +252,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 logger.log({
                     'iteration': total_iterations,
                     'epoch': epoch,
-                    'reports': {
+                    'records': {
                         'train_alarm': {'loss': np.mean(losses_alarm)},
                         'train_vehicle': {'loss': np.mean(losses_vehicle)}}})
 
@@ -301,7 +301,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 loss_a/valid_batches, loss_v/valid_batches))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
-                    'reports': {
+                    'records': {
                         'valid_alarm': {'loss': loss_a/valid_batches},
                         'valid_vehicle': {'loss': loss_v/valid_batches}}})
         # Checkpoint

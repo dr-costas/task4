@@ -1,9 +1,12 @@
 from torch.nn import functional
+from torch.nn.init import orthogonal
 
 # General variables
 batch_size = 8
 epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
+
+grad_clip_norm = 0.
 
 # Variables needed for the common feature extraction layer
 common_out_channels = 40
@@ -30,6 +33,7 @@ branch_alarm_rnn_input_size = 80
 branch_alarm_rnn_output_dims = [64, 64]
 branch_alarm_rnn_activations = [functional.tanh, functional.tanh]
 branch_alarm_attention_bias = True
+branch_alarm_init = orthogonal
 
 branch_alarm_dropout_cnn = 0.2
 branch_alarm_dropout_rnn_input = 0.2
@@ -54,6 +58,7 @@ branch_vehicle_rnn_input_size = 80
 branch_vehicle_rnn_output_dims = [64, 64]
 branch_vehicle_rnn_activations = [functional.tanh, functional.tanh]
 branch_vehicle_attention_bias = True
+branch_vehicle_init = orthogonal
 
 branch_vehicle_dropout_cnn = 0.2
 branch_vehicle_dropout_rnn_input = 0.2

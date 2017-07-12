@@ -13,6 +13,8 @@ from tqdm import tqdm
 
 import torch
 from torch.nn import functional
+from torch.nn.utils import clip_grad_norm
+
 from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, get_output, get_data_stream
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
 
@@ -72,7 +74,8 @@ def main():
         rnn_subsamplings=config.branch_alarm_rnn_subsamplings,
         decoder_dim=config.branch_alarm_decoder_dim,
         output_classes=len(alarm_classes) + 1,
-        attention_bias=config.branch_alarm_attention_bias
+        attention_bias=config.branch_alarm_attention_bias,
+        init=config.branch_alarm_init
     )
 
     # The vehicle branch layers
@@ -95,7 +98,8 @@ def main():
         rnn_subsamplings=config.branch_vehicle_rnn_subsamplings,
         decoder_dim=config.branch_vehicle_decoder_dim,
         output_classes=len(vehicle_classes) + 1,
-        attention_bias=config.branch_vehicle_attention_bias
+        attention_bias=config.branch_vehicle_attention_bias,
+        init=config.branch_vehicle_init
     )
 
     # Check if we have GPU, and if we do then GPU them all
@@ -189,6 +193,12 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
 
             optim.zero_grad()
             loss.backward()
+
+            if config.grad_clip_norm > 0:
+                clip_grad_norm(common_feature_extractor, config.grad_clip_norm)
+                clip_grad_norm(branch_vehicle, config.grad_clip_norm)
+                clip_grad_norm(branch_alarm, config.grad_clip_norm)
+
             optim.step()
 
             if print_grads:

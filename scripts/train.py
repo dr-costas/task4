@@ -5,13 +5,12 @@ import pickle
 import importlib
 import numpy as np
 import timeit
+import shutil
 from argparse import ArgumentParser
 from contextlib import closing
 from itertools import chain
 from mimir import Logger
 from tqdm import tqdm
-import timeit
-import shutil
 
 import torch
 from torch.nn import functional
@@ -42,6 +41,7 @@ def main():
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
+    parser.add_argument('--visdom', action='store_true')
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -164,6 +164,16 @@ def main():
 
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)
+    if args.visdom:
+        from attend_to_detect.utils.visdom_handler import VisdomHandler
+
+        visdom_handler = VisdomHandler(
+            ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
+            'loss',
+            dict(title='Train/valid alarm loss',
+                 xlabel='iteration',
+                 ylabel='cross-entropy'))
+        logger.handlers.append(visdom_handler)
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -239,10 +249,12 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             losses_vehicle.append(loss_v.data[0])
 
             if total_iterations % 10 == 0:
-                logger.log({'iteration': total_iterations,
-                            'epoch': epoch,
-                            'train': {'alarm_loss': np.mean(losses_alarm),
-                                      'vehicle_loss': np.mean(losses_vehicle)}})
+                logger.log({
+                    'iteration': total_iterations,
+                    'epoch': epoch,
+                    'reports': {
+                        'train_alarm': {'loss': np.mean(losses_alarm)},
+                        'train_vehicle': {'loss': np.mean(losses_vehicle)}}})
 
             total_iterations += 1
 
@@ -289,8 +301,9 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 loss_a/valid_batches, loss_v/valid_batches))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
-                    'valid': {'alarm_loss': loss_a/valid_batches,
-                              'vehicle_loss': loss_v/valid_batches}})
+                    'reports': {
+                        'valid_alarm': {'loss': loss_a/valid_batches},
+                        'valid_vehicle': {'loss': loss_v/valid_batches}}})
         # Checkpoint
         ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
                 'branch_alarm': branch_alarm.state_dict(),

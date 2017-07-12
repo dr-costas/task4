@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.nn.functional import tanh, softmax
+from torch.nn.init import xavier_normal, constant
 
 
 class ContentAttention(nn.Module):
@@ -37,12 +38,17 @@ class ContentAttention(nn.Module):
 
 
 class GaussianAttention(nn.Module):
-    def __init__(self, dim, monotonic=False, bias=False):
+    def __init__(self, dim, monotonic=False, bias=True):
         super(GaussianAttention, self).__init__()
         self.linear_in = nn.Linear(dim, 2, bias=bias)
-        self.linear_out = nn.Linear(dim * 2, dim, bias=bias)
         self.mask = None
         self.monotonic = monotonic
+
+        self.initialize()
+
+    def initialize(self):
+        xavier_normal(self.linear_in.weight.data)
+        constant(self.linear_in.bias.data, 0)
 
     @property
     def is_cuda(self):
@@ -61,7 +67,7 @@ class GaussianAttention(nn.Module):
     def get_indexes(self, context):
         indexes = Variable(torch.arange(0, context.size(1)) / context.size(1),
                            requires_grad=False).unsqueeze(0)
-        if torch.has_cudnn:
+        if self.is_cuda:
             indexes.cuda()
         return indexes
 

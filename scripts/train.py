@@ -1,18 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 import os
 import pickle
 import importlib
 import numpy as np
-from contextlib import closing
+import timeit
 from argparse import ArgumentParser
+from contextlib import closing
+from itertools import chain
 from mimir import Logger
 from tqdm import tqdm
 import timeit
+import shutil
 
 import torch
 from torch.nn import functional
+from torch.nn.utils import clip_grad_norm
+
 from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, get_output, get_data_stream
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
 
@@ -34,8 +38,10 @@ def total_cost(hiddens, targets):
 def main():
     # Getting configuration file from the command line argument
     parser = ArgumentParser()
+    parser.add_argument('--train_examples', type=int, default=-1)
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
+    parser.add_argument('--print-grads', action='store_true')
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -70,7 +76,9 @@ def main():
         dropout_rnn_recurrent=config.branch_alarm_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_alarm_rnn_subsamplings,
         decoder_dim=config.branch_alarm_decoder_dim,
-        output_classes=len(alarm_classes) + 1
+        output_classes=len(alarm_classes) + 1,
+        attention_bias=config.branch_alarm_attention_bias,
+        init=config.branch_alarm_init
     )
 
     # The vehicle branch layers
@@ -92,7 +100,9 @@ def main():
         dropout_rnn_recurrent=config.branch_vehicle_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_vehicle_rnn_subsamplings,
         decoder_dim=config.branch_vehicle_decoder_dim,
-        output_classes=len(vehicle_classes) + 1
+        output_classes=len(vehicle_classes) + 1,
+        attention_bias=config.branch_vehicle_attention_bias,
+        init=config.branch_vehicle_init
     )
 
     # Check if we have GPU, and if we do then GPU them all
@@ -107,18 +117,39 @@ def main():
         params += [p for p in block.parameters()]
     optim = torch.optim.Adam(params)
 
+    # Do we have a checkpoint?
+    if os.path.isfile(args.checkpoint_path):
+        print('Checkpoint directory exists!')
+        if os.path.isfile(os.path.join(checkpoint_path, 'latest.pt')):
+            print('Loading checkpoint...')
+            ckpt = torch.load(os.path.join(checkpoint_path, 'latest.pt'))
+            common_feature_extractor.load_state_dict(ckpt['common_feature_extractor'])
+            branch_alarm.load_state_dict(ckpt['branch_alarm'])
+            branch_vehicle.load_state_dict(ckpt['branch_vehicle'])
+            optim.load_state_dict(ckpt['optim'])
+    else:
+        print('Checkpoint directory does not exist, creating...')
+        os.makedirs(args.checkpoint_path)
+
+    if args.train_examples == -1:
+        examples = None
+    else:
+        examples = args.train_examples
+
     if os.path.isfile('scaler.pkl'):
         with open('scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
         train_data, _ = get_data_stream(
             dataset_name=config.dataset_full_path,
             batch_size=config.batch_size,
-            calculate_scaling_metrics=False)
+            calculate_scaling_metrics=False,
+            examples=examples)
     else:
         train_data, scaler = get_data_stream(
             dataset_name=config.dataset_full_path,
             batch_size=config.batch_size,
-            calculate_scaling_metrics=True)
+            calculate_scaling_metrics=True,
+            examples=examples)
         # Serialize scaler so we don't need to do this again
         with open('scaler.pkl', 'wb') as f:
             pickle.dump(scaler, f)
@@ -136,11 +167,22 @@ def main():
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
-            train_data, valid_data, scaler, optim, logger)
+            train_data, valid_data, scaler, optim, args.print_grads, logger)
+
+
+def iterate_params(module):
+    has_children = False
+    for child in module.children():
+        for pair in iterate_params(child):
+            yield pair
+        has_children = True
+    if not has_children:
+        for name, parameter in module.named_parameters():
+            yield (parameter, name, module)
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
-               train_data, valid_data, scaler, optim, logger):
+               train_data, valid_data, scaler, optim, print_grads, logger):
     total_iterations = 0
     for epoch in range(config.epochs):
         common_feature_extractor.train()
@@ -175,7 +217,21 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
 
             optim.zero_grad()
             loss.backward()
+
+            if config.grad_clip_norm > 0:
+                clip_grad_norm(common_feature_extractor, config.grad_clip_norm)
+                clip_grad_norm(branch_vehicle, config.grad_clip_norm)
+                clip_grad_norm(branch_alarm, config.grad_clip_norm)
+
             optim.step()
+
+            if print_grads:
+                for param, name, module in chain(iterate_params(common_feature_extractor),
+                                                 iterate_params(branch_alarm),
+                                                 iterate_params(branch_vehicle)):
+                    print("{}\t\t {}\t\t: grad norm {}\t\t weight norm {}".format(
+                        name, str(module), param.grad.norm(2).data[0],
+                        param.norm(2).data[0]))
 
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
@@ -183,8 +239,8 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             if total_iterations % 10 == 0:
                 logger.log({'iteration': total_iterations,
                             'epoch': epoch,
-                            'train': {'alarm_loss': loss_a.data[0],
-                                      'vehicle_loss': loss_v.data[0]}})
+                            'train': {'alarm_loss': np.mean(losses_alarm),
+                                      'vehicle_loss': np.mean(losses_vehicle)}})
 
             total_iterations += 1
 
@@ -233,6 +289,14 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                     'epoch': epoch,
                     'valid': {'alarm_loss': loss_a/valid_batches,
                               'vehicle_loss': loss_v/valid_batches}})
+        # Checkpoint
+        ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
+                'branch_alarm': branch_alarm.state_dict(),
+                'branch_vehicle': branch_vehicle.state_dict(),
+                'optim': optim.state_dict()}
+        torch.save(ckpt, os.path.join(args.checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
+        shutil.copyfile(os.path.join(args.checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
+                os.path.join(args.checkpoint_path, 'latest.pt'))
 
 
 if __name__ == '__main__':

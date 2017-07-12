@@ -5,6 +5,7 @@ from operator import mul
 from functools import reduce
 import torch
 from torch.autograd import Variable
+from torch.nn.init import xavier_normal, constant, orthogonal
 
 from attention import GaussianAttention
 
@@ -31,7 +32,8 @@ class CategoryBranch2(torch.nn.Module):
                  rnn_input_size, rnn_out_dims, rnn_activations,
                  dropout_cnn, dropout_rnn_input, dropout_rnn_recurrent,
                  rnn_subsamplings, decoder_dim, output_classes,
-                 monotonic_attention=False, attention_bias=False):
+                 monotonic_attention=False, attention_bias=True,
+                 init=xavier_normal):
 
         super(CategoryBranch2, self).__init__()
 
@@ -164,11 +166,31 @@ class CategoryBranch2(torch.nn.Module):
                     self.rnn_activations_b[i])
 
         # Adding attention layer
-        self.attention = GaussianAttention(dim=self.decoder_dim,
-                monotonic=monotonic_attention, bias=attention_bias)
+        self.attention = GaussianAttention(
+            dim=self.decoder_dim,
+            monotonic=monotonic_attention, bias=attention_bias)
 
         self.decoder_cell = torch.nn.GRUCell(2*self.rnn_out_dims[-1], self.decoder_dim)
         self.output_linear = torch.nn.Linear(self.decoder_dim, self.output_classes)
+
+        self.initialize(init)
+
+    def init_gru_cell(self, module, init):
+        init(module.weight_ih.data)
+        init(module.weight_hh.data)
+        constant(module.bias_ih.data, 0)
+        constant(module.bias_hh.data, 0)
+
+    def initialize(self, init):
+        for module in self.cnn_layers:
+            xavier_normal(module.weight.data)
+            constant(module.bias.data, 0)
+        for module in self.rnn_layers_f + self.rnn_layers_b:
+            self.init_gru_cell(module, init)
+
+        self.init_gru_cell(self.decoder_cell, init)
+        xavier_normal(self.output_linear.weight.data)
+        constant(self.output_linear.bias.data, 0)
 
     def get_initial_decoder_state(self, batch_size):
         # TODO: smarter initial state

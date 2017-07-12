@@ -18,8 +18,8 @@ from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, get_output, get_data_stream
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
+from scripts.calculate_challenge_metrics import tagging_metrics_from_raw_output
 
-__author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 
@@ -42,7 +42,6 @@ def main():
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
     parser.add_argument('--visdom', action='store_true')
-    parser.add_argument('--visdom-port', type=int)
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -173,7 +172,7 @@ def main():
             'loss',
             dict(title='Train/valid alarm loss',
                  xlabel='iteration',
-                 ylabel='cross-entropy'), port=args.visdom_port)
+                 ylabel='cross-entropy'))
         logger.handlers.append(visdom_handler)
     with closing(logger):
         train_loop(
@@ -182,15 +181,15 @@ def main():
             args.checkpoint_path)
 
 
-def iterate_params(module):
+def iterate_params(pytorch_module):
     has_children = False
-    for child in module.children():
+    for child in pytorch_module.children():
         for pair in iterate_params(child):
             yield pair
         has_children = True
     if not has_children:
-        for name, parameter in module.named_parameters():
-            yield (parameter, name, module)
+        for name, parameter in pytorch_module.named_parameters():
+            yield (parameter, name, pytorch_module)
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -253,7 +252,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 logger.log({
                     'iteration': total_iterations,
                     'epoch': epoch,
-                    'records': {
+                    'reports': {
                         'train_alarm': {'loss': np.mean(losses_alarm)},
                         'train_vehicle': {'loss': np.mean(losses_vehicle)}}})
 
@@ -271,6 +270,10 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         loss_a = 0.0
         loss_v = 0.0
         validation_start_time = timeit.timeit()
+        predictions_alarm = []
+        predictions_vehicle = []
+        ground_truths_alarm = []
+        ground_truths_vehicle = []
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler, volatile=True)
@@ -296,13 +299,26 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
 
             valid_batches += 1
 
+            if torch.has_cudnn:
+                alarm_output = alarm_output.cpu()
+                vehicle_output = vehicle_output.cpu()
+                y_alarm_logits = y_alarm_logits.cpu()
+                y_vehicle_logits = y_vehicle_logits.cpu()
+
+            predictions_alarm.extend(alarm_output.data.numpy())
+            predictions_vehicle.extend(vehicle_output.data.numpy())
+            ground_truths_alarm.extend(y_alarm_logits.data.numpy())
+            ground_truths_vehicle.extend(y_vehicle_logits.data.numpy())
+
         print('Epoch {:4d} validation elapsed time {:10.5f}'
               '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
                 epoch, validation_start_time - timeit.timeit(),
                 loss_a/valid_batches, loss_v/valid_batches))
+        print(tagging_metrics_from_raw_output(predictions_alarm, ground_truths_alarm, alarm_classes))
+        print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, vehicle_classes))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
-                    'records': {
+                    'reports': {
                         'valid_alarm': {'loss': loss_a/valid_batches},
                         'valid_vehicle': {'loss': loss_v/valid_batches}}})
         # Checkpoint

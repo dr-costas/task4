@@ -9,7 +9,6 @@ import numpy as np
 import h5py
 from fuel.datasets import H5PYDataset
 
-__author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 small_tests = True

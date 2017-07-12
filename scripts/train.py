@@ -36,6 +36,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
+    parser.add_argument('--print-grads', action='store_true')
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -138,7 +139,7 @@ def main():
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
-            train_data, valid_data, scaler, optim, logger)
+            train_data, valid_data, scaler, optim, args.print_grads, logger)
 
 
 def iterate_params(module):
@@ -153,7 +154,7 @@ def iterate_params(module):
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
-               train_data, valid_data, scaler, optim, logger):
+               train_data, valid_data, scaler, optim, print_grads, logger):
     total_iterations = 0
     for epoch in range(config.epochs):
         common_feature_extractor.train()
@@ -190,12 +191,13 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             loss.backward()
             optim.step()
 
-            for param, name, module in chain(iterate_params(common_feature_extractor),
-                                             iterate_params(branch_alarm),
-                                             iterate_params(branch_vehicle)):
-                print("{}\t\t {}\t\t: grad norm {}\t\t weight norm {}".format(
-                    name, str(module), param.grad.norm(2).data[0],
-                    param.norm(2).data[0]))
+            if print_grads:
+                for param, name, module in chain(iterate_params(common_feature_extractor),
+                                                 iterate_params(branch_alarm),
+                                                 iterate_params(branch_vehicle)):
+                    print("{}\t\t {}\t\t: grad norm {}\t\t weight norm {}".format(
+                        name, str(module), param.grad.norm(2).data[0],
+                        param.norm(2).data[0]))
 
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])

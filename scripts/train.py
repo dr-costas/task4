@@ -148,7 +148,7 @@ def iterate_params(module):
             yield pair
         has_children = True
     if not has_children:
-        for parameter in module.named_parameters():
+        for name, parameter in module.named_parameters():
             yield (parameter, name, module)
 
 

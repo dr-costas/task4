@@ -43,6 +43,7 @@ def main():
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
     parser.add_argument('--visdom', action='store_true')
+    parser.add_argument('--visdom-port', type=int, default=5004)
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -173,7 +174,7 @@ def main():
             'loss',
             dict(title='Train/valid alarm loss',
                  xlabel='iteration',
-                 ylabel='cross-entropy'))
+                 ylabel='cross-entropy'), port=args.visdom_port)
         logger.handlers.append(visdom_handler)
     with closing(logger):
         train_loop(
@@ -253,7 +254,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 logger.log({
                     'iteration': total_iterations,
                     'epoch': epoch,
-                    'reports': {
+                    'records': {
                         'train_alarm': {'loss': np.mean(losses_alarm)},
                         'train_vehicle': {'loss': np.mean(losses_vehicle)}}})
 
@@ -319,7 +320,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, vehicle_classes))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
-                    'reports': {
+                    'records': {
                         'valid_alarm': {'loss': loss_a/valid_batches},
                         'valid_vehicle': {'loss': loss_v/valid_batches}}})
         # Checkpoint

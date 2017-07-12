@@ -9,7 +9,7 @@ from torch.nn.init import xavier_normal, constant, orthogonal
 
 from .attention import GaussianAttention
 
-__author__ = 'Konstantinos Drossos - TUT'
+__author__ = 'Konstantinos Drossos - TUT | Joao Santos - MILA | Dmitriy Serdyuk - MILA'
 __docformat__ = 'reStructuredText'
 
 

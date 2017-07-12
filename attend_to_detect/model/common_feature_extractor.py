@@ -6,7 +6,7 @@ import torch
 from torch.nn import functional
 from torch.nn.init import xavier_normal, constant
 
-__author__ = 'Konstantinos Drossos - TUT'
+__author__ = 'Konstantinos Drossos - TUT | Joao Santos - MILA | Dmitriy Serdyuk - MILA'
 __docformat__ = 'reStructuredText'
 
 

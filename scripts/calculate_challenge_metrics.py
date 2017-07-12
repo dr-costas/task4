@@ -6,7 +6,7 @@ import sed_eval
 import numpy as np
 
 
-__author__ = 'Konstantinos Drossos -- TUT'
+__author__ = 'Konstantinos Drossos - TUT | Joao Santos - MILA | Dmitriy Serdyuk - MILA'
 __docformat__ = 'reStructuredText'
 
 

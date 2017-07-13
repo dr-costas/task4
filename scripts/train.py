@@ -13,26 +13,14 @@ from mimir import Logger
 from tqdm import tqdm
 
 import torch
-from torch.nn import functional
 from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output, get_data_stream)
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
-from attend_to_detect.evaluation import tagging_metrics_from_raw_output
+from attend_to_detect.evaluation import validate, category_cost, accuracy
 
 __docformat__ = 'reStructuredText'
-
-
-def category_cost(out_hidden, target):
-    out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
-    target_flat = target.view(-1)
-    return torch.nn.functional.cross_entropy(out_hidden_flat, target_flat)
-
-
-def total_cost(hiddens, targets):
-    return category_cost(hiddens[0], targets[0]) + \
-            category_cost(hiddens[1], targets[1])
 
 
 def main():
@@ -46,6 +34,7 @@ def main():
     parser.add_argument('--visdom-port', type=int, default=5004)
     parser.add_argument('--visdom-server', default='http://localhost')
     parser.add_argument('--debug', action='store_true', default=False)
+    parser.add_argument('--no-tqdm', action='store_true')
     args = parser.parse_args()
 
     if args.debug:
@@ -195,7 +184,7 @@ def main():
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
             train_data, valid_data, scaler, optim, args.print_grads, logger,
-            args.checkpoint_path)
+            args.checkpoint_path, args.no_tqdm)
 
 
 def iterate_params(pytorch_module):
@@ -209,14 +198,9 @@ def iterate_params(pytorch_module):
             yield (parameter, name, pytorch_module)
 
 
-def accuracy(output, target):
-    acc = (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
-    return acc.data[0]
-
-
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                train_data, valid_data, scaler, optim, print_grads, logger,
-               checkpoint_path):
+               checkpoint_path, no_tqdm):
     total_iterations = 0
     for epoch in range(config.epochs):
         common_feature_extractor.train()
@@ -227,8 +211,11 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         accuracies_alarm = []
         accuracies_vehicle = []
         epoch_start_time = timeit.timeit()
-        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()),
-                                     total=50000 // config.batch_size):
+        epoch_iterator = enumerate(train_data.get_epoch_iterator())
+        if not no_tqdm:
+            epoch_iterator = tqdm(epoch_iterator,
+                                  total=50000 // config.batch_size)
+        for iteration, batch in epoch_iterator:
             # Get input
             x = get_input(batch[0], scaler)
 
@@ -295,88 +282,15 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 epoch, epoch_start_time - timeit.timeit(),
                 np.mean(losses_alarm), np.mean(losses_vehicle)))
 
+        # Validation
         common_feature_extractor.eval()
         branch_alarm.eval()
         branch_vehicle.eval()
-        valid_batches = 0
-        loss_a = 0.0
-        loss_v = 0.0
 
-        accuracy_a = 0.0
-        accuracy_v = 0.0
+        validate(
+            valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
+            scaler, logger, total_iterations, epoch)
 
-        validation_start_time = timeit.timeit()
-        predictions_alarm = []
-        predictions_vehicle = []
-        ground_truths_alarm = []
-        ground_truths_vehicle = []
-        for batch in valid_data.get_epoch_iterator():
-            # Get input
-            x = get_input(batch[0], scaler, volatile=True)
-
-            # Get target values for alarm classes
-            y_alarm_1_hot, y_alarm_logits = get_output(batch[-2])
-
-            # Get target values for vehicle classes
-            y_vehicle_1_hot, y_vehicle_logits = get_output(batch[-1])
-
-            # Go through the common feature extractor
-            common_features = common_feature_extractor(x)
-
-            # Go through the alarm branch
-            alarm_output, alarm_weights = branch_alarm(common_features, y_alarm_logits.size(1))
-
-            # Go through the vehicle branch
-            vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
-
-            # Calculate validation losses
-            loss_a += category_cost(alarm_output, y_alarm_logits).data[0]
-            loss_v += category_cost(vehicle_output, y_vehicle_logits).data[0]
-
-            accuracy_a += accuracy(alarm_output, y_alarm_logits)
-            accuracy_v += accuracy(vehicle_output, y_vehicle_logits)
-
-            valid_batches += 1
-
-            if torch.has_cudnn:
-                alarm_output = alarm_output.cpu()
-                vehicle_output = vehicle_output.cpu()
-                y_alarm_logits = y_alarm_logits.cpu()
-                y_vehicle_logits = y_vehicle_logits.cpu()
-
-            predictions_alarm.extend(functional.softmax(alarm_output).data.numpy())
-            predictions_vehicle.extend(functional.softmax(vehicle_output).data.numpy())
-            ground_truths_alarm.extend(y_alarm_logits.data.numpy())
-            ground_truths_vehicle.extend(y_vehicle_logits.data.numpy())
-
-        print('Epoch {:4d} validation elapsed time {:10.5f}'
-              '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
-                epoch, validation_start_time - timeit.timeit(),
-                loss_a/valid_batches, loss_v/valid_batches))
-        metrics_alarm = tagging_metrics_from_raw_output(
-            predictions_alarm, ground_truths_alarm, ['<EOS>'] + alarm_classes)
-        metrics_vehicle = tagging_metrics_from_raw_output(
-            predictions_vehicle, ground_truths_vehicle, ['<EOS>'] + vehicle_classes)
-        print(metrics_alarm)
-        print(metrics_vehicle)
-
-        f_score_overall_alarm = metrics_alarm.overall_f_measure()
-        f_score_overall_vehicle = metrics_vehicle.overall_f_measure()
-        logger.log({'iteration': total_iterations,
-                    'epoch': epoch,
-                    'records': {
-                        'valid_alarm': dict(
-                            loss=loss_a/valid_batches,
-                            acc=accuracy_a/valid_batches,
-                            f_score=f_score_overall_alarm['f_measure'],
-                            precision=f_score_overall_alarm['precision'],
-                            recall=f_score_overall_alarm['recall']),
-                        'valid_vehicle': dict(
-                            loss=loss_v/valid_batches,
-                            acc=accuracy_v/valid_batches,
-                            f_score=f_score_overall_vehicle['f_measure'],
-                            precision=f_score_overall_vehicle['precision'],
-                            recall=f_score_overall_vehicle['recall'])}})
         # Checkpoint
         ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
                 'branch_alarm': branch_alarm.state_dict(),

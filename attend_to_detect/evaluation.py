@@ -1,14 +1,141 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import numpy as np
+import timeit
+import torch
+from torch.nn.functional import cross_entropy, softmax
 from sed_eval.sound_event import SegmentBasedMetrics
 
+from attend_to_detect.dataset import (
+    vehicle_classes, alarm_classes, get_input, get_output)
 
-__docformat__ = 'reStructuredText'
+
+MAX_VALIDATION_LEN = 5
+EPS = 1e-5
 
 
-def tagging_metrics_from_list(y_pred_dict, y_true_dict, all_labels):
+def accuracy(output, target):
+    prediction = output.max(2)[1].squeeze().type_as(target)
+
+    # Don't pay for EOS
+    prediction = prediction * (target == 0).type_as(prediction)
+
+    numerator = torch.ne(prediction, target).type(torch.FloatTensor).sum()
+    denominator = (target != 0).type_as(numerator).sum()
+    numerator = numerator.data[0]
+    denominator = denominator.data[0]
+    if denominator < EPS:
+        if numerator < EPS:
+            error = 0.
+        else:
+            error = 1.
+    else:
+        error = numerator / denominator
+    if error > 1.:
+        error = 1
+    return 100. * (1. - error)
+
+
+def category_cost(out_hidden, target):
+    out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
+    target_flat = target.view(-1)
+    return cross_entropy(out_hidden_flat, target_flat)
+
+
+def total_cost(hiddens, targets):
+    return category_cost(hiddens[0], targets[0]) + \
+           category_cost(hiddens[1], targets[1])
+
+
+def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
+             scaler, logger, total_iterations, epoch):
+    valid_batches = 0
+    loss_a = 0.0
+    loss_v = 0.0
+
+    accuracy_a = 0.0
+    accuracy_v = 0.0
+
+    validation_start_time = timeit.timeit()
+    predictions_alarm = []
+    predictions_vehicle = []
+    ground_truths_alarm = []
+    ground_truths_vehicle = []
+    for batch in valid_data.get_epoch_iterator():
+        # Get input
+        x = get_input(batch[0], scaler, volatile=True)
+
+        # Get target values for alarm classes
+        y_alarm_1_hot, y_alarm_logits = get_output(batch[-2])
+
+        # Get target values for vehicle classes
+        y_vehicle_1_hot, y_vehicle_logits = get_output(batch[-1])
+
+        # Go through the common feature extractor
+        common_features = common_feature_extractor(x)
+
+        # Go through the alarm branch
+        alarm_output, alarm_weights = branch_alarm(
+            common_features, MAX_VALIDATION_LEN)
+
+        # Go through the vehicle branch
+        vehicle_output, vehicle_weights = branch_vehicle(
+            common_features, MAX_VALIDATION_LEN)
+
+        # Calculate validation losses
+        # Chopping of at the groundtruth length
+
+        alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)].contiguous()
+        vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)].contiguous()
+
+        loss_a += category_cost(alarm_output_aligned, y_alarm_logits).data[0]
+        loss_v += category_cost(vehicle_output_aligned, y_vehicle_logits).data[0]
+
+        accuracy_a += accuracy(alarm_output_aligned, y_alarm_logits)
+        accuracy_v += accuracy(vehicle_output_aligned, y_vehicle_logits)
+
+        valid_batches += 1
+
+        if torch.has_cudnn:
+            alarm_output = alarm_output.cpu()
+            vehicle_output = vehicle_output.cpu()
+            y_alarm_logits = y_alarm_logits.cpu()
+            y_vehicle_logits = y_vehicle_logits.cpu()
+
+        predictions_alarm.extend(softmax(alarm_output).data.numpy())
+        predictions_vehicle.extend(softmax(vehicle_output).data.numpy())
+        ground_truths_alarm.extend(y_alarm_logits.data.numpy())
+        ground_truths_vehicle.extend(y_vehicle_logits.data.numpy())
+
+    print('Epoch {:4d} validation elapsed time {:10.5f}'
+          '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+                epoch, validation_start_time - timeit.timeit(),
+                loss_a/valid_batches, loss_v/valid_batches))
+    metrics_alarm = tagging_metrics_from_raw_output(
+        predictions_alarm, ground_truths_alarm, ['<EOS>'] + alarm_classes)
+    metrics_vehicle = tagging_metrics_from_raw_output(
+        predictions_vehicle, ground_truths_vehicle, ['<EOS>'] + vehicle_classes)
+    print(metrics_alarm)
+    print(metrics_vehicle)
+
+    f_score_overall_alarm = metrics_alarm.overall_f_measure()
+    f_score_overall_vehicle = metrics_vehicle.overall_f_measure()
+    logger.log({'iteration': total_iterations,
+                'epoch': epoch,
+                'records': {
+                    'valid_alarm': dict(
+                        loss=loss_a/valid_batches,
+                        acc=accuracy_a/valid_batches,
+                        f_score=f_score_overall_alarm['f_measure'],
+                        precision=f_score_overall_alarm['precision'],
+                        recall=f_score_overall_alarm['recall']),
+                    'valid_vehicle': dict(
+                        loss=loss_v/valid_batches,
+                        acc=accuracy_v/valid_batches,
+                        f_score=f_score_overall_vehicle['f_measure'],
+                        precision=f_score_overall_vehicle['precision'],
+                        recall=f_score_overall_vehicle['recall'])}})
+
+
+def tagging_metrics_from_list(y_pred_dict, y_true_dict, all_labels, file_prefix=''):
     """
 
     :param y_pred_dict:
@@ -106,11 +233,8 @@ def main():
         y_categorical[i, :] = events_ids
 
     x = tagging_metrics_from_raw_output(x, y_categorical, labels, y_true_is_categorical=True)
-    print('OK')
     print(tagging_metrics_from_raw_output(x, y_1_hot, labels, y_true_is_categorical=False))
 
 
 if __name__ == '__main__':
     main()
-
-# EOF

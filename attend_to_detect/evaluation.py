@@ -8,8 +8,16 @@ from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output)
 
 
+MAX_VALIDATION_LEN = 5
+
+
 def accuracy(output, target):
-    acc = (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
+    prediction = output.max(2)[1].squeeze().type_as(target)
+
+    # Don't pay for EOS
+    prediction *= (output == 0).type(torch.FloatTensor)
+
+    acc = (100. * torch.eq(prediction, target).type(torch.FloatTensor)).mean()
     return acc.data[0]
 
 
@@ -52,17 +60,24 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
         common_features = common_feature_extractor(x)
 
         # Go through the alarm branch
-        alarm_output, alarm_weights = branch_alarm(common_features, y_alarm_logits.size(1))
+        alarm_output, alarm_weights = branch_alarm(
+            common_features, MAX_VALIDATION_LEN)
 
         # Go through the vehicle branch
-        vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
+        vehicle_output, vehicle_weights = branch_vehicle(
+            common_features, MAX_VALIDATION_LEN)
 
         # Calculate validation losses
-        loss_a += category_cost(alarm_output, y_alarm_logits).data[0]
-        loss_v += category_cost(vehicle_output, y_vehicle_logits).data[0]
+        # Chopping of at the groundtruth length
 
-        accuracy_a += accuracy(alarm_output, y_alarm_logits)
-        accuracy_v += accuracy(vehicle_output, y_vehicle_logits)
+        alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)]
+        vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)]
+
+        loss_a += category_cost(alarm_output_aligned, y_alarm_logits).data[0]
+        loss_v += category_cost(vehicle_output_aligned, y_vehicle_logits).data[0]
+
+        accuracy_a += accuracy(alarm_output_aligned, y_alarm_logits)
+        accuracy_v += accuracy(vehicle_output_aligned, y_vehicle_logits)
 
         valid_batches += 1
 

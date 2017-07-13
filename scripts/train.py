@@ -283,7 +283,6 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 np.mean(losses_alarm), np.mean(losses_vehicle)))
 
         # Validation
-
         common_feature_extractor.eval()
         branch_alarm.eval()
         branch_vehicle.eval()

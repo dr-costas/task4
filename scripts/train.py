@@ -45,7 +45,11 @@ def main():
     parser.add_argument('--visdom', action='store_true')
     parser.add_argument('--visdom-port', type=int, default=5004)
     parser.add_argument('--visdom-server', default='http://localhost')
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
+
+    if args.debug:
+        torch.has_cudnn = False
 
     config = importlib.import_module(args.config_file)
 
@@ -340,8 +344,8 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 y_alarm_logits = y_alarm_logits.cpu()
                 y_vehicle_logits = y_vehicle_logits.cpu()
 
-            predictions_alarm.extend(alarm_output.data.numpy())
-            predictions_vehicle.extend(vehicle_output.data.numpy())
+            predictions_alarm.extend(functional.softmax(alarm_output).data.numpy())
+            predictions_vehicle.extend(functional.softmax(vehicle_output).data.numpy())
             ground_truths_alarm.extend(y_alarm_logits.data.numpy())
             ground_truths_vehicle.extend(y_vehicle_logits.data.numpy())
 

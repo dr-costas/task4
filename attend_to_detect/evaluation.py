@@ -55,7 +55,6 @@ def tagging_metrics_from_raw_output(y_pred, y_true, all_labels, y_true_is_catego
         all_files_list = []
 
         for i, file_data in enumerate(the_data):
-            found_eos = False
             file_list = []
             for event in file_data:
                 if is_categorical:
@@ -63,9 +62,7 @@ def tagging_metrics_from_raw_output(y_pred, y_true, all_labels, y_true_is_catego
                 else:
                     index = np.argmax(event)
 
-                if index == 0 and not found_eos:
-                    found_eos = True
-                elif index == 0 and found_eos:
+                if index == 0:
                     break
 
                 file_list.append(
@@ -82,7 +79,7 @@ def tagging_metrics_from_raw_output(y_pred, y_true, all_labels, y_true_is_catego
     data_pred = get_data(y_pred, all_labels, False)
     data_true = get_data(y_true, all_labels, y_true_is_categorical)
 
-    return tagging_metrics_from_list(data_pred, data_true, all_labels)
+    return tagging_metrics_from_list(data_pred, data_true, all_labels[1:])
 
 
 def main():
@@ -108,7 +105,8 @@ def main():
 
         y_categorical[i, :] = events_ids
 
-    print(tagging_metrics_from_raw_output(x, y_categorical, labels, y_true_is_categorical=True))
+    x = tagging_metrics_from_raw_output(x, y_categorical, labels, y_true_is_categorical=True)
+    print('OK')
     print(tagging_metrics_from_raw_output(x, y_1_hot, labels, y_true_is_categorical=False))
 
 

@@ -38,7 +38,7 @@ def total_cost(hiddens, targets):
 def main():
     # Getting configuration file from the command line argument
     parser = ArgumentParser()
-    parser.add_argument('--train_examples', type=int, default=-1)
+    parser.add_argument('--train-examples', type=int, default=-1)
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
@@ -174,7 +174,7 @@ def main():
             'loss',
             dict(title='Train/valid alarm loss',
                  xlabel='iteration',
-                 ylabel='cross-entropy'))
+                 ylabel='cross-entropy'), port=args.visdom_port)
         logger.handlers.append(visdom_handler)
     with closing(logger):
         train_loop(

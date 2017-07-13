@@ -349,8 +349,8 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
               '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
                 epoch, validation_start_time - timeit.timeit(),
                 loss_a/valid_batches, loss_v/valid_batches))
-        print(tagging_metrics_from_raw_output(predictions_alarm, ground_truths_alarm, alarm_classes))
-        print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, vehicle_classes))
+        print(tagging_metrics_from_raw_output(predictions_alarm, ground_truths_alarm, ['<EOS>'] + alarm_classes))
+        print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, ['<EOS>'] + vehicle_classes))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
                     'records': {

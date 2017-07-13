@@ -16,9 +16,10 @@ import torch
 from torch.nn import functional
 from torch.nn.utils import clip_grad_norm
 
-from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, get_output, get_data_stream
+from attend_to_detect.dataset import (
+    vehicle_classes, alarm_classes, get_input, get_output, get_data_stream)
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
-from scripts.calculate_challenge_metrics import tagging_metrics_from_raw_output
+from attend_to_detect.evaluation import tagging_metrics_from_raw_output
 
 __docformat__ = 'reStructuredText'
 

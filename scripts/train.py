@@ -329,8 +329,8 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             loss_a += category_cost(alarm_output, y_alarm_logits).data[0]
             loss_v += category_cost(vehicle_output, y_vehicle_logits).data[0]
 
-            accuracy_a += accuracy(alarm_output, y_alarm_logits).data[0]
-            accuracy_v += accuracy(vehicle_output, y_vehicle_logits).data[0]
+            accuracy_a += accuracy(alarm_output, y_alarm_logits)
+            accuracy_v += accuracy(vehicle_output, y_vehicle_logits)
 
             valid_batches += 1
 

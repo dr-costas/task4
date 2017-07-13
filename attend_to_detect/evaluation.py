@@ -13,10 +13,11 @@ EPS = 1e-5
 
 
 def accuracy(output, target):
-    prediction = output.max(2)[1].squeeze().type_as(target)
+    # output : (batch, steps, classes)
+    prediction = output.max(-1)[1].squeeze().type_as(target)
 
     # Don't pay for EOS
-    prediction = prediction * (target == 0).type_as(prediction)
+    prediction = prediction * (target != 0).type_as(prediction)
 
     numerator = torch.ne(prediction, target).type(torch.FloatTensor).sum()
     denominator = (target != 0).type_as(numerator).sum()

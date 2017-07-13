@@ -15,10 +15,11 @@ def accuracy(output, target):
     prediction = output.max(2)[1].squeeze().type_as(target)
 
     # Don't pay for EOS
-    prediction *= (output == 0).type(torch.FloatTensor)
+    prediction = prediction * (target == 0).type_as(prediction)
 
-    acc = (100. * torch.eq(prediction, target).type(torch.FloatTensor)).mean()
-    return acc.data[0]
+    error = torch.ne(prediction, target).type(torch.FloatTensor)
+    error = error.sum() / (target != 0).type_as(error).sum()
+    return 100 - error.data[0]
 
 
 def category_cost(out_hidden, target):

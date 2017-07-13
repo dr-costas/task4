@@ -9,6 +9,7 @@ from attend_to_detect.dataset import (
 
 
 MAX_VALIDATION_LEN = 5
+EPS = 1e-5
 
 
 def accuracy(output, target):
@@ -17,9 +18,20 @@ def accuracy(output, target):
     # Don't pay for EOS
     prediction = prediction * (target == 0).type_as(prediction)
 
-    error = torch.ne(prediction, target).type(torch.FloatTensor)
-    error = error.sum() / (target != 0).type_as(error).sum()
-    return 100 - error.data[0]
+    numerator = torch.ne(prediction, target).type(torch.FloatTensor).sum()
+    denominator = (target != 0).type_as(numerator).sum()
+    numerator = numerator.data[0]
+    denominator = denominator.data[0]
+    if denominator < EPS:
+        if numerator < EPS:
+            error = 0.
+        else:
+            error = 1.
+    else:
+        error = numerator / denominator
+    if error > 1.:
+        error = 1
+    return 100. * (1. - error)
 
 
 def category_cost(out_hidden, target):
@@ -71,8 +83,8 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
         # Calculate validation losses
         # Chopping of at the groundtruth length
 
-        alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)]
-        vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)]
+        alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)].contiguous()
+        vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)].contiguous()
 
         loss_a += category_cost(alarm_output_aligned, y_alarm_logits).data[0]
         loss_v += category_cost(vehicle_output_aligned, y_vehicle_logits).data[0]
@@ -123,7 +135,7 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
                         recall=f_score_overall_vehicle['recall'])}})
 
 
-def tagging_metrics_from_dictionaries(y_pred_dict, y_true_dict, all_labels, file_prefix=''):
+def tagging_metrics_from_list(y_pred_dict, y_true_dict, all_labels, file_prefix=''):
     """
 
     :param y_pred_dict:
@@ -221,7 +233,6 @@ def main():
         y_categorical[i, :] = events_ids
 
     x = tagging_metrics_from_raw_output(x, y_categorical, labels, y_true_is_categorical=True)
-    print('OK')
     print(tagging_metrics_from_raw_output(x, y_1_hot, labels, y_true_is_categorical=False))
 
 

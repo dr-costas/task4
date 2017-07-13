@@ -1,9 +1,11 @@
 from torch.nn import functional
+from torch.nn.init import orthogonal
 
 # General variables
 batch_size = 32
 epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
+grad_clip_norm = False
 
 # Variables needed for the common feature extraction layer
 common_out_channels = 32
@@ -13,7 +15,6 @@ common_padding = (1, 1)
 common_dropout = 0.5
 common_dilation = (1, 1)
 common_activation = functional.leaky_relu
-
 
 # Variables needed for the alarm branch
 branch_alarm_channels_out = [40, 40, 40]
@@ -32,12 +33,13 @@ branch_alarm_rnn_activations = [functional.tanh, functional.tanh]
 
 branch_alarm_dropout_cnn = 0.2
 branch_alarm_dropout_rnn_input = 0.2
-branch_alarm_dropout_rnn_recurrent = 0.2
+branch_alarm_dropout_rnn_recurrent = 0.0
 
 branch_alarm_rnn_subsamplings = [3]
 
 branch_alarm_decoder_dim = 32
 branch_alarm_attention_bias = True
+branch_alarm_init = orthogonal
 
 # Variables needed for the vehicle branch
 branch_vehicle_channels_out = [40, 40, 40]
@@ -56,9 +58,10 @@ branch_vehicle_rnn_activations = [functional.tanh, functional.tanh]
 
 branch_vehicle_dropout_cnn = 0.2
 branch_vehicle_dropout_rnn_input = 0.2
-branch_vehicle_dropout_rnn_recurrent = 0.2
+branch_vehicle_dropout_rnn_recurrent = 0.0
 
 branch_vehicle_rnn_subsamplings = [3]
 
 branch_vehicle_decoder_dim = 32
 branch_vehicle_attention_bias = True
+branch_vehicle_init = orthogonal

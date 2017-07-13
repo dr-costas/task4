@@ -9,7 +9,6 @@ from torch.nn.init import xavier_normal, constant, orthogonal
 
 from .attention import GaussianAttention
 
-__author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 
@@ -173,6 +172,8 @@ class CategoryBranch2(torch.nn.Module):
         self.decoder_cell = torch.nn.GRUCell(2*self.rnn_out_dims[-1], self.decoder_dim)
         self.output_linear = torch.nn.Linear(self.decoder_dim, self.output_classes)
 
+        self.input_to_output = torch.nn.Linear(self.rnn_out_dims[-1] * 2, self.decoder_dim)
+
         self.initialize(init)
 
     def init_gru_cell(self, module, init):
@@ -191,6 +192,9 @@ class CategoryBranch2(torch.nn.Module):
         self.init_gru_cell(self.decoder_cell, init)
         xavier_normal(self.output_linear.weight.data)
         constant(self.output_linear.bias.data, 0)
+
+        xavier_normal(self.input_to_output.weight.data)
+        constant(self.input_to_output.bias.data, 0)
 
     def get_initial_decoder_state(self, batch_size):
         # TODO: smarter initial state
@@ -257,7 +261,7 @@ class CategoryBranch2(torch.nn.Module):
             output = output[:, 0:u_l:self.rnn_subsamplings[i], :]
             o_size = output.size()
 
-        hidden = self.get_initial_decoder_state(o_size[0])
+        hidden = self.input_to_output(output[:, -1, :])
         kappa = self.attention.get_initial_kappa(output)
 
         out_hidden = []

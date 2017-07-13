@@ -5,22 +5,22 @@ import pickle
 import importlib
 import numpy as np
 import timeit
+import shutil
 from argparse import ArgumentParser
 from contextlib import closing
 from itertools import chain
 from mimir import Logger
 from tqdm import tqdm
-import timeit
-import shutil
 
 import torch
 from torch.nn import functional
 from torch.nn.utils import clip_grad_norm
 
-from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, get_output, get_data_stream
+from attend_to_detect.dataset import (
+    vehicle_classes, alarm_classes, get_input, get_output, get_data_stream)
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
+from attend_to_detect.evaluation import tagging_metrics_from_raw_output
 
-__author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 
@@ -38,10 +38,13 @@ def total_cost(hiddens, targets):
 def main():
     # Getting configuration file from the command line argument
     parser = ArgumentParser()
-    parser.add_argument('--train_examples', type=int, default=-1)
+    parser.add_argument('--train-examples', type=int, default=-1)
     parser.add_argument('config_file')
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
+    parser.add_argument('--visdom', action='store_true')
+    parser.add_argument('--visdom-port', type=int, default=5004)
+    parser.add_argument('--visdom-server', default='http://localhost')
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -164,6 +167,26 @@ def main():
 
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)
+    if args.visdom:
+        from attend_to_detect.utils.visdom_handler import VisdomHandler
+
+        loss_handler = VisdomHandler(
+            ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
+            'loss',
+            dict(title='Train/valid losses',
+                 xlabel='iteration',
+                 ylabel='cross-entropy'),
+            server=args.visdom_server, port=args.visdom_port)
+        logger.handlers.append(loss_handler)
+        accuracy_handler = VisdomHandler(
+            ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
+            'acc',
+            dict(title='Train/valid accuracies',
+                 xlabel='iteration',
+                 ylabel='accuracy, %'),
+            server=args.visdom_server, port=args.visdom_port)
+        logger.handlers.append(accuracy_handler)
+
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -171,15 +194,20 @@ def main():
             args.checkpoint_path)
 
 
-def iterate_params(module):
+def iterate_params(pytorch_module):
     has_children = False
-    for child in module.children():
+    for child in pytorch_module.children():
         for pair in iterate_params(child):
             yield pair
         has_children = True
     if not has_children:
-        for name, parameter in module.named_parameters():
-            yield (parameter, name, module)
+        for name, parameter in pytorch_module.named_parameters():
+            yield (parameter, name, pytorch_module)
+
+
+def accuracy(output, target):
+    acc = (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
+    return acc.data[0]
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -192,8 +220,11 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         branch_vehicle.train()
         losses_alarm = []
         losses_vehicle = []
+        accuracies_alarm = []
+        accuracies_vehicle = []
         epoch_start_time = timeit.timeit()
-        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()), total=50000):
+        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()),
+                                     total=50000 // config.batch_size):
             # Get input
             x = get_input(batch[0], scaler)
 
@@ -238,11 +269,20 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
 
+            accuracies_alarm.append(accuracy(alarm_output, y_alarm_logits))
+            accuracies_vehicle.append(accuracy(vehicle_output, y_vehicle_logits))
+
             if total_iterations % 10 == 0:
-                logger.log({'iteration': total_iterations,
-                            'epoch': epoch,
-                            'train': {'alarm_loss': np.mean(losses_alarm),
-                                      'vehicle_loss': np.mean(losses_vehicle)}})
+                logger.log({
+                    'iteration': total_iterations,
+                    'epoch': epoch,
+                    'records': {
+                        'train_alarm': dict(
+                            loss=np.mean(losses_alarm[-10:]),
+                            acc=np.mean(accuracies_alarm[-10:])),
+                        'train_vehicle': dict(
+                            loss=np.mean(losses_vehicle[-10:]),
+                            acc=np.mean(accuracies_vehicle[-10:]))}})
 
             total_iterations += 1
 
@@ -257,7 +297,15 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         valid_batches = 0
         loss_a = 0.0
         loss_v = 0.0
+
+        accuracy_a = 0.0
+        accuracy_v = 0.0
+
         validation_start_time = timeit.timeit()
+        predictions_alarm = []
+        predictions_vehicle = []
+        ground_truths_alarm = []
+        ground_truths_vehicle = []
         for batch in valid_data.get_epoch_iterator():
             # Get input
             x = get_input(batch[0], scaler, volatile=True)
@@ -281,24 +329,46 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             loss_a += category_cost(alarm_output, y_alarm_logits).data[0]
             loss_v += category_cost(vehicle_output, y_vehicle_logits).data[0]
 
+            accuracy_a += accuracy(alarm_output, y_alarm_logits).data[0]
+            accuracy_v += accuracy(vehicle_output, y_vehicle_logits).data[0]
+
             valid_batches += 1
+
+            if torch.has_cudnn:
+                alarm_output = alarm_output.cpu()
+                vehicle_output = vehicle_output.cpu()
+                y_alarm_logits = y_alarm_logits.cpu()
+                y_vehicle_logits = y_vehicle_logits.cpu()
+
+            predictions_alarm.extend(alarm_output.data.numpy())
+            predictions_vehicle.extend(vehicle_output.data.numpy())
+            ground_truths_alarm.extend(y_alarm_logits.data.numpy())
+            ground_truths_vehicle.extend(y_vehicle_logits.data.numpy())
 
         print('Epoch {:4d} validation elapsed time {:10.5f}'
               '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
                 epoch, validation_start_time - timeit.timeit(),
                 loss_a/valid_batches, loss_v/valid_batches))
+        print(tagging_metrics_from_raw_output(predictions_alarm, ground_truths_alarm, alarm_classes))
+        print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, vehicle_classes))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
-                    'valid': {'alarm_loss': loss_a/valid_batches,
-                              'vehicle_loss': loss_v/valid_batches}})
+                    'records': {
+                        'valid_alarm': dict(
+                            loss=loss_a/valid_batches,
+                            acc=accuracy_a/valid_batches),
+                        'valid_vehicle': dict(
+                            loss=loss_v/valid_batches,
+                            acc=accuracy_v/valid_batches)}})
         # Checkpoint
         ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
                 'branch_alarm': branch_alarm.state_dict(),
                 'branch_vehicle': branch_vehicle.state_dict(),
                 'optim': optim.state_dict()}
         torch.save(ckpt, os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
-        shutil.copyfile(os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
-                os.path.join(checkpoint_path, 'latest.pt'))
+        shutil.copyfile(
+            os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
+            os.path.join(checkpoint_path, 'latest.pt'))
 
 
 if __name__ == '__main__':

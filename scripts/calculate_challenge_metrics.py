@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import numpy as np
 
-# imports
-import sed_eval
+from attend_to_detect.evaluation import (
+    tagging_metrics_from_raw_output, tagging_metrics_from_dictionaries)
 
 
-__author__ = 'Konstantinos Drossos -- TUT'
 __docformat__ = 'reStructuredText'
 
 
@@ -50,55 +50,9 @@ def calculate_sed_metrics(y_ped_dict, y_true_dict):
     pass
 
 
-def calculate_tagging_metrics(y_pred_dict, y_true_dict, all_labels, file_prefix=''):
-    """
-
-    :param y_pred_dict:
-    :type y_pred_dict: dict[str, dict[str, list[str|float]]]
-    :param y_true_dict:
-    :type y_true_dict: dict[str, dict[str, list[str|float]]]
-    :param all_labels:
-    :type all_labels: list[str]
-    :param file_prefix:
-    :type file_prefix: str
-    :return: The metrics
-    :rtype:
-    """
-
-    segment_based_metrics = sed_eval.sound_event.SegmentBasedMetrics(event_label_list=all_labels,
-                                                                     time_resolution=1)
-
-    for file_id_pred, file_id_true in zip(y_pred_dict.keys(), y_true_dict.keys()):
-        file_data_pred = y_pred_dict[file_id_pred]
-        file_data_true = y_true_dict[file_id_true]
-
-        pred_data = []
-        for event_label, times in file_data_pred.items():
-            pred_data.append({
-                'event_label': event_label,
-                'event_onset': times[0],
-                'event_offset': times[1]
-            })
-
-        true_data = []
-        for event_label, times in file_data_true.items():
-            true_data.append({
-                'event_label': event_label,
-                'event_onset': times[0],
-                'event_offset': times[1]
-            })
-
-        segment_based_metrics.evaluate(true_data, pred_data)
-
-    # Or print all metrics as reports
-    return segment_based_metrics
-
-
 def main():
     labels = ['car', 'bus', 'truck', 'bike']
     nb_files = 10
-
-    import numpy as np
 
     pred_indices = np.random.randint(0, len(labels), nb_files)
     true_indices = np.random.randint(0, len(labels), nb_files)
@@ -114,10 +68,19 @@ def main():
             i: {labels[i_true]: [0.00, 10.00]}
         })
 
-    print(calculate_tagging_metrics(dict_pred, dict_true, labels))
+    print(tagging_metrics_from_dictionaries(dict_pred, dict_true, labels))
+
+    x = np.random.random((nb_files, 3, len(labels)))
+    y_categorical = np.random.randint(0, len(labels), (nb_files, 3))
+    y_1_hot = np.zeros((nb_files, 3, len(labels)))
+    for i in range(nb_files):
+        for ii in range(3):
+            random_col = np.random.randint(0, len(labels))
+            y_1_hot[i, ii, random_col] = 1
+
+    print(tagging_metrics_from_raw_output(x, y_categorical, labels, y_true_is_categorical=True))
+    print(tagging_metrics_from_raw_output(x, y_1_hot, labels, y_true_is_categorical=False))
 
 
 if __name__ == '__main__':
     main()
-
-# EOF

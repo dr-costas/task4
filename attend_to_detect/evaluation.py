@@ -1,5 +1,5 @@
 import numpy as np
-from sed_eval.sound_event import SegmentBaseMetrics
+from sed_eval.sound_event import SegmentBasedMetrics
 
 
 def tagging_metrics_from_dictionaries(y_pred_dict, y_true_dict, all_labels, file_prefix=''):

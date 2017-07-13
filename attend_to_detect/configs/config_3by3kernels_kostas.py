@@ -1,3 +1,4 @@
+from torch.optim import Adam
 from torch.nn import functional
 from torch.nn.init import orthogonal
 
@@ -7,6 +8,10 @@ epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 
 grad_clip_norm = 0.
+
+# Optimizer parameters
+optimizer = Adam
+optimizer_lr = 1e-4
 
 # Variables needed for the common feature extraction layer
 common_out_channels = 32

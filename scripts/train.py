@@ -111,7 +111,7 @@ def main():
     params = []
     for block in (common_feature_extractor, branch_alarm, branch_vehicle):
         params += [p for p in block.parameters()]
-    optim = torch.optim.Adam(params)
+    optim = config.optimizer(params, lr=config.optimizer_lr)
 
     # Do we have a checkpoint?
     if os.path.isdir(args.checkpoint_path):

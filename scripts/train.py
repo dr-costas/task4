@@ -353,17 +353,30 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
               '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
                 epoch, validation_start_time - timeit.timeit(),
                 loss_a/valid_batches, loss_v/valid_batches))
-        print(tagging_metrics_from_raw_output(predictions_alarm, ground_truths_alarm, ['<EOS>'] + alarm_classes))
-        print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, ['<EOS>'] + vehicle_classes))
+        metrics_alarm = tagging_metrics_from_raw_output(
+            predictions_alarm, ground_truths_alarm, ['<EOS>'] + alarm_classes)
+        metrics_vehicle = tagging_metrics_from_raw_output(
+            predictions_vehicle, ground_truths_vehicle, ['<EOS>'] + vehicle_classes)
+        print(metrics_alarm)
+        print(metrics_vehicle)
+
+        f_score_overall_alarm = metrics_alarm.overall_f_measure()
+        f_score_overall_vehicle = metrics_vehicle.overall_f_measure()
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
                     'records': {
                         'valid_alarm': dict(
                             loss=loss_a/valid_batches,
-                            acc=accuracy_a/valid_batches),
+                            acc=accuracy_a/valid_batches,
+                            f_score=f_score_overall_alarm['f_measure'],
+                            precision=f_score_overall_alarm['precision'],
+                            recall=f_score_overall_alarm['recall']),
                         'valid_vehicle': dict(
                             loss=loss_v/valid_batches,
-                            acc=accuracy_v/valid_batches)}})
+                            acc=accuracy_v/valid_batches,
+                            f_score=f_score_overall_vehicle['f_measure'],
+                            precision=f_score_overall_vehicle['precision'],
+                            recall=f_score_overall_vehicle['recall'])}})
         # Checkpoint
         ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
                 'branch_alarm': branch_alarm.state_dict(),

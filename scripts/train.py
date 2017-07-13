@@ -206,7 +206,7 @@ def iterate_params(pytorch_module):
 
 
 def accuracy(output, target):
-    return (100. * torch.eq(output.max(1)[1].type_as(target), target)).mean()
+    return (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -365,8 +365,9 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                 'branch_vehicle': branch_vehicle.state_dict(),
                 'optim': optim.state_dict()}
         torch.save(ckpt, os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
-        shutil.copyfile(os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
-                os.path.join(checkpoint_path, 'latest.pt'))
+        shutil.copyfile(
+            os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
+            os.path.join(checkpoint_path, 'latest.pt'))
 
 
 if __name__ == '__main__':

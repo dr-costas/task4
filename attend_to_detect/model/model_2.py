@@ -23,7 +23,6 @@ if sys.version_info > (3, 0):
 else:
     from .model.category_specific_branch import CategoryBranch
 
-__author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 

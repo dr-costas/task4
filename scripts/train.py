@@ -20,7 +20,6 @@ from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, 
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
 from scripts.calculate_challenge_metrics import tagging_metrics_from_raw_output
 
-__author__ = 'Konstantinos Drossos - TUT'
 __docformat__ = 'reStructuredText'
 
 

@@ -240,7 +240,7 @@ class CategoryBranch2(torch.nn.Module):
             h_s_f[:, 0, :] = self.rnn_activations_f[i](self.rnn_layers_f[i](
                 self.rnn_dropout_layers_input_f[i](output[:, 0, :]),
                 zeros_f))
-            h_s_b[:, 0, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
+            h_s_b[:, -1, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
                 self.rnn_dropout_layers_input_b[i](output[:, -1, :]),
                 zeros_b))
 
@@ -249,7 +249,7 @@ class CategoryBranch2(torch.nn.Module):
                     self.rnn_dropout_layers_input_f[i](output[:, s_i, :]),
                     self.rnn_dropout_layers_recurrent_f[i](h_s_f[:, s_i - 1, :])
                 ))
-                h_s_b[:, s_i, :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
+                h_s_b[:, -(s_i + 1), :] = self.rnn_activations_b[i](self.rnn_layers_b[i](
                     self.rnn_dropout_layers_input_b[i](output[:, -(s_i + 1), :]),
                     self.rnn_dropout_layers_recurrent_b[i](h_s_b[:, s_i - 1, :])
                 ))
@@ -261,7 +261,8 @@ class CategoryBranch2(torch.nn.Module):
             output = output[:, 0:u_l:self.rnn_subsamplings[i], :]
             o_size = output.size()
 
-        hidden = self.input_to_output(output[:, -1, :])
+        hidden = self.input_to_output(
+            torch.cat([h_s_f[:, -1, :], h_s_b[:, 0, :]], -1))
         kappa = self.attention.get_initial_kappa(output)
 
         out_hidden = []

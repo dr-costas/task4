@@ -206,7 +206,8 @@ def iterate_params(pytorch_module):
 
 
 def accuracy(output, target):
-    return (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
+    acc = (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
+    return acc.data[0]
 
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,

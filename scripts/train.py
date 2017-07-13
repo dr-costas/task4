@@ -43,6 +43,7 @@ def main():
     parser.add_argument('checkpoint_path')
     parser.add_argument('--print-grads', action='store_true')
     parser.add_argument('--visdom', action='store_true')
+    parser.add_argument('--visdom-port', type=int, default=5004)
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)

@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--visdom-port', type=int, default=5004)
     parser.add_argument('--visdom-server', default='http://localhost')
     parser.add_argument('--debug', action='store_true', default=False)
+    parser.add_argument('--no-tqdm', action='store_true')
     args = parser.parse_args()
 
     if args.debug:
@@ -195,7 +196,7 @@ def main():
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
             train_data, valid_data, scaler, optim, args.print_grads, logger,
-            args.checkpoint_path)
+            args.checkpoint_path, args.no_tqdm)
 
 
 def iterate_params(pytorch_module):
@@ -216,7 +217,7 @@ def accuracy(output, target):
 
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                train_data, valid_data, scaler, optim, print_grads, logger,
-               checkpoint_path):
+               checkpoint_path, no_tqdm):
     total_iterations = 0
     for epoch in range(config.epochs):
         common_feature_extractor.train()
@@ -227,8 +228,11 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         accuracies_alarm = []
         accuracies_vehicle = []
         epoch_start_time = timeit.timeit()
-        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()),
-                                     total=50000 // config.batch_size):
+        epoch_iterator = enumerate(train_data.get_epoch_iterator())
+        if not no_tqdm:
+            epoch_iterator = tqdm(epoch_iterator,
+                                  total=50000 // config.batch_size)
+        for iteration, batch in epoch_iterator:
             # Get input
             x = get_input(batch[0], scaler)
 

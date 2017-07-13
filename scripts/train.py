@@ -44,6 +44,7 @@ def main():
     parser.add_argument('--print-grads', action='store_true')
     parser.add_argument('--visdom', action='store_true')
     parser.add_argument('--visdom-port', type=int, default=5004)
+    parser.add_argument('--visdom-server', default='http://localhost')
     args = parser.parse_args()
 
     config = importlib.import_module(args.config_file)
@@ -169,13 +170,23 @@ def main():
     if args.visdom:
         from attend_to_detect.utils.visdom_handler import VisdomHandler
 
-        visdom_handler = VisdomHandler(
+        loss_handler = VisdomHandler(
             ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
             'loss',
-            dict(title='Train/valid alarm loss',
+            dict(title='Train/valid losses',
                  xlabel='iteration',
-                 ylabel='cross-entropy'), port=args.visdom_port)
-        logger.handlers.append(visdom_handler)
+                 ylabel='cross-entropy'),
+            server=args.visdom_server, port=args.visdom_port)
+        logger.handlers.append(loss_handler)
+        accuracy_handler = VisdomHandler(
+            ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
+            'acc',
+            dict(title='Train/valid accuracies',
+                 xlabel='iteration',
+                 ylabel='accuracy, %'),
+            server=args.visdom_server, port=args.visdom_port)
+        logger.handlers.append(accuracy_handler)
+
     with closing(logger):
         train_loop(
             config, common_feature_extractor, branch_vehicle, branch_alarm,
@@ -194,6 +205,11 @@ def iterate_params(pytorch_module):
             yield (parameter, name, pytorch_module)
 
 
+def accuracy(output, target):
+    acc = (100. * torch.eq(output.max(2)[1].squeeze().type_as(target), target).type(torch.FloatTensor)).mean()
+    return acc.data[0]
+
+
 def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
                train_data, valid_data, scaler, optim, print_grads, logger,
                checkpoint_path):
@@ -204,8 +220,11 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         branch_vehicle.train()
         losses_alarm = []
         losses_vehicle = []
+        accuracies_alarm = []
+        accuracies_vehicle = []
         epoch_start_time = timeit.timeit()
-        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()), total=50000):
+        for iteration, batch in tqdm(enumerate(train_data.get_epoch_iterator()),
+                                     total=50000 // config.batch_size):
             # Get input
             x = get_input(batch[0], scaler)
 
@@ -250,13 +269,20 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
 
+            accuracies_alarm.append(accuracy(alarm_output, y_alarm_logits))
+            accuracies_vehicle.append(accuracy(vehicle_output, y_vehicle_logits))
+
             if total_iterations % 10 == 0:
                 logger.log({
                     'iteration': total_iterations,
                     'epoch': epoch,
-                    'reports': {
-                        'train_alarm': {'loss': np.mean(losses_alarm)},
-                        'train_vehicle': {'loss': np.mean(losses_vehicle)}}})
+                    'records': {
+                        'train_alarm': dict(
+                            loss=np.mean(losses_alarm[-10:]),
+                            acc=np.mean(accuracies_alarm[-10:])),
+                        'train_vehicle': dict(
+                            loss=np.mean(losses_vehicle[-10:]),
+                            acc=np.mean(accuracies_vehicle[-10:]))}})
 
             total_iterations += 1
 
@@ -271,6 +297,10 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         valid_batches = 0
         loss_a = 0.0
         loss_v = 0.0
+
+        accuracy_a = 0.0
+        accuracy_v = 0.0
+
         validation_start_time = timeit.timeit()
         predictions_alarm = []
         predictions_vehicle = []
@@ -299,6 +329,9 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             loss_a += category_cost(alarm_output, y_alarm_logits).data[0]
             loss_v += category_cost(vehicle_output, y_vehicle_logits).data[0]
 
+            accuracy_a += accuracy(alarm_output, y_alarm_logits).data[0]
+            accuracy_v += accuracy(vehicle_output, y_vehicle_logits).data[0]
+
             valid_batches += 1
 
             if torch.has_cudnn:
@@ -320,17 +353,22 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
         print(tagging_metrics_from_raw_output(predictions_vehicle, ground_truths_vehicle, vehicle_classes))
         logger.log({'iteration': total_iterations,
                     'epoch': epoch,
-                    'reports': {
-                        'valid_alarm': {'loss': loss_a/valid_batches},
-                        'valid_vehicle': {'loss': loss_v/valid_batches}}})
+                    'records': {
+                        'valid_alarm': dict(
+                            loss=loss_a/valid_batches,
+                            acc=accuracy_a/valid_batches),
+                        'valid_vehicle': dict(
+                            loss=loss_v/valid_batches,
+                            acc=accuracy_v/valid_batches)}})
         # Checkpoint
         ckpt = {'common_feature_extractor': common_feature_extractor.state_dict(),
                 'branch_alarm': branch_alarm.state_dict(),
                 'branch_vehicle': branch_vehicle.state_dict(),
                 'optim': optim.state_dict()}
         torch.save(ckpt, os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)))
-        shutil.copyfile(os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
-                os.path.join(checkpoint_path, 'latest.pt'))
+        shutil.copyfile(
+            os.path.join(checkpoint_path, 'ckpt_{}.pt'.format(epoch)),
+            os.path.join(checkpoint_path, 'latest.pt'))
 
 
 if __name__ == '__main__':

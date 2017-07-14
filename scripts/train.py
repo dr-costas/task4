@@ -18,7 +18,7 @@ from torch.nn.utils import clip_grad_norm
 from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output_binary, get_data_stream)
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
-from attend_to_detect.evaluation import validate, category_cost, accuracy, binary_category_cost, binary_accuracy
+from attend_to_detect.evaluation import validate, binary_category_cost, binary_accuracy
 
 __docformat__ = 'reStructuredText'
 

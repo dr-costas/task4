@@ -35,6 +35,13 @@ def accuracy(output, target):
     return 100. * (1. - error)
 
 
+def binary_accuracy(output, target):
+    output_flat = output.view(-1)
+    target_flat = target.view(-1).byte()
+    acc = (100. * ((output_flat >= 0.5) == target_flat).sum().float()/output_flat.size(0))
+    return acc.cpu().data.numpy()[0]
+
+
 def category_cost(out_hidden, target):
     out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
     target_flat = target.view(-1)
@@ -81,23 +88,18 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
 
         # Go through the alarm branch
         alarm_output, alarm_weights = branch_alarm(
-            common_features, MAX_VALIDATION_LEN)
+            common_features, len(alarm_classes))
 
         # Go through the vehicle branch
         vehicle_output, vehicle_weights = branch_vehicle(
-            common_features, MAX_VALIDATION_LEN)
+            common_features, len(vehicle_classes))
 
         # Calculate validation losses
-        # Chopping of at the groundtruth length
+        loss_a += category_cost(alarm_output, y_alarm_1_hot).data[0]
+        loss_v += category_cost(vehicle_output, y_vehicle_1_hot).data[0]
 
-        alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)].contiguous()
-        vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)].contiguous()
-
-        loss_a += category_cost(alarm_output_aligned, y_alarm_logits).data[0]
-        loss_v += category_cost(vehicle_output_aligned, y_vehicle_logits).data[0]
-
-        accuracy_a += accuracy(alarm_output_aligned, y_alarm_logits)
-        accuracy_v += accuracy(vehicle_output_aligned, y_vehicle_logits)
+        accuracy_a += binary_accuracy(alarm_output, y_alarm_1_hot)
+        accuracy_v += binary_accuracy(vehicle_output, y_vehicle_1_hot)
 
         valid_batches += 1
 

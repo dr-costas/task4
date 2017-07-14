@@ -18,7 +18,7 @@ from torch.nn.utils import clip_grad_norm
 from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output, get_output_binary, get_data_stream)
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
-from attend_to_detect.evaluation import validate, category_cost, accuracy, binary_category_cost
+from attend_to_detect.evaluation import validate, category_cost, accuracy, binary_category_cost, binary_accuracy
 
 __docformat__ = 'reStructuredText'
 
@@ -265,10 +265,8 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
 
-            #accuracies_alarm.append(accuracy(alarm_output, y_alarm_logits))
-            #accuracies_vehicle.append(accuracy(vehicle_output, y_vehicle_logits))
-            accuracies_alarm.append([0])
-            accuracies_vehicle.append([0])
+            accuracies_alarm.append(binary_accuracy(alarm_output, y_alarm_1_hot))
+            accuracies_vehicle.append(binary_accuracy(vehicle_output, y_vehicle_1_hot))
 
             if total_iterations % 10 == 0:
                 logger.log({

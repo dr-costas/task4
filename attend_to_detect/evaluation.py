@@ -59,7 +59,7 @@ def total_cost(hiddens, targets):
 def binary_category_cost(out_hidden, target):
     out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
     target_flat = target.view(-1)
-    return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat)
+    return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat, weight=target.data + 0.1)
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,

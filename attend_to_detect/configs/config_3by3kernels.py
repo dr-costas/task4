@@ -10,7 +10,7 @@ grad_clip_norm = False
 
 grad_clip_norm = 0.
 alarm_loss_weight = 0.1
-vehicle_loss_weight = None # None for no weight
+vehicle_loss_weight = None  # None for no weight
 
 # Optimizer parameters
 optimizer = Adam

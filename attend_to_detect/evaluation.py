@@ -36,9 +36,11 @@ def accuracy(output, target):
 
 
 def binary_accuracy(output, target):
-    output_flat = output.view(-1)
-    target_flat = target.view(-1).byte()
-    acc = (100. * ((output_flat >= 0.5) == target_flat).sum().float()/output_flat.size(0))
+    acc = torch.sum(((output >= 0.5).float() == target.float()).float(), -2) / float(output.size()[1])
+    acc = torch.sum(acc)/float(acc.size()[0])
+    # output_flat = output.view(-1)
+    # target_flat = target.view(-1).byte()
+    # acc = (100. * ((output_flat >= 0.5) == target_flat).sum().float()/output_flat.size(0))
     return acc.cpu().data.numpy()[0]
 
 

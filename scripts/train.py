@@ -73,7 +73,7 @@ def main():
         dropout_rnn_recurrent=config.branch_alarm_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_alarm_rnn_subsamplings,
         decoder_dim=config.branch_alarm_decoder_dim,
-        output_classes=len(alarm_classes) + 1,
+        output_classes=1,
         attention_bias=config.branch_alarm_attention_bias,
         init=config.branch_alarm_init
     )
@@ -97,7 +97,7 @@ def main():
         dropout_rnn_recurrent=config.branch_vehicle_dropout_rnn_recurrent,
         rnn_subsamplings=config.branch_vehicle_rnn_subsamplings,
         decoder_dim=config.branch_vehicle_decoder_dim,
-        output_classes=len(vehicle_classes) + 1,
+        output_classes=1,
         attention_bias=config.branch_vehicle_attention_bias,
         init=config.branch_vehicle_init
     )
@@ -234,14 +234,14 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             common_features = common_feature_extractor(x)
 
             # Go through the alarm branch
-            alarm_output, alarm_weights = branch_alarm(common_features, y_alarm_logits.size(1))
+            alarm_output, alarm_weights = branch_alarm(common_features, len(alarm_classes))
 
             # Go through the vehicle branch
-            vehicle_output, vehicle_weights = branch_vehicle(common_features, y_vehicle_logits.size(1))
+            vehicle_output, vehicle_weights = branch_vehicle(common_features, len(alarm_classes))
 
             # Calculate losses, do backward passing, and do updates
-            loss_a = category_cost(alarm_output, y_alarm_logits)
-            loss_v = category_cost(vehicle_output, y_vehicle_logits)
+            loss_a = binary_category_cost(alarm_output, y_alarm_logits)
+            loss_v = binary_category_cost(vehicle_output, y_vehicle_logits)
             loss = loss_a + loss_v
 
             optim.zero_grad()
@@ -265,8 +265,10 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             losses_alarm.append(loss_a.data[0])
             losses_vehicle.append(loss_v.data[0])
 
-            accuracies_alarm.append(accuracy(alarm_output, y_alarm_logits))
-            accuracies_vehicle.append(accuracy(vehicle_output, y_vehicle_logits))
+            #accuracies_alarm.append(accuracy(alarm_output, y_alarm_logits))
+            #accuracies_vehicle.append(accuracy(vehicle_output, y_vehicle_logits))
+            accuracies_alarm.append([0])
+            accuracies_vehicle.append([0])
 
             if total_iterations % 10 == 0:
                 logger.log({

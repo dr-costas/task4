@@ -1,7 +1,7 @@
 import numpy as np
 import timeit
 import torch
-from torch.nn.functional import cross_entropy, softmax
+from torch.nn.functional import cross_entropy, softmax, binary_cross_entropy_with_logits
 from sed_eval.sound_event import SegmentBasedMetrics
 
 from attend_to_detect.dataset import (
@@ -44,6 +44,12 @@ def category_cost(out_hidden, target):
 def total_cost(hiddens, targets):
     return category_cost(hiddens[0], targets[0]) + \
            category_cost(hiddens[1], targets[1])
+
+
+def binary_category_cost(out_hidden, target):
+    out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
+    target_flat = target.view(-1)
+    return binary_cross_entropy_with_logits(out_hidden_flat, target_flat)
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,

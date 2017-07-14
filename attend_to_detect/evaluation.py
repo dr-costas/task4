@@ -1,7 +1,7 @@
 import numpy as np
 import timeit
 import torch
-from torch.nn.functional import cross_entropy, softmax, binary_cross_entropy, sigmoid
+from torch.nn.functional import cross_entropy, binary_cross_entropy, sigmoid
 from sed_eval.sound_event import SegmentBasedMetrics
 
 from attend_to_detect.dataset import (

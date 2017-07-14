@@ -237,7 +237,7 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             alarm_output, alarm_weights = branch_alarm(common_features, len(alarm_classes))
 
             # Go through the vehicle branch
-            vehicle_output, vehicle_weights = branch_vehicle(common_features, len(alarm_classes))
+            vehicle_output, vehicle_weights = branch_vehicle(common_features, len(vehicle_classes))
 
             # Calculate losses, do backward passing, and do updates
             loss_a = binary_category_cost(alarm_output, y_alarm_logits)

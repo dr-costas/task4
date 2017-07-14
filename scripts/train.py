@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--visdom-server', default='http://localhost')
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--no-tqdm', action='store_true')
+    parser.add_argument('--job-id', default='')
     args = parser.parse_args()
 
     if args.debug:
@@ -162,11 +163,15 @@ def main():
                     formatter=None)
     if args.visdom:
         from attend_to_detect.utils.visdom_handler import VisdomHandler
-
+        title_losses = 'Train/valid losses'
+        title_accu = 'Train/valid accuracies'
+        if args.job_id != '':
+            title_losses += ' - {}'.format(args.job_id)
+            title_accu += ' - {}'.format(args.job_id)
         loss_handler = VisdomHandler(
             ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
             'loss',
-            dict(title='Train/valid losses',
+            dict(title=title_losses,
                  xlabel='iteration',
                  ylabel='cross-entropy'),
             server=args.visdom_server, port=args.visdom_port)
@@ -174,7 +179,7 @@ def main():
         accuracy_handler = VisdomHandler(
             ['train_alarm', 'train_vehicle', 'valid_alarm', 'valid_vehicle'],
             'acc',
-            dict(title='Train/valid accuracies',
+            dict(title=title_accu,
                  xlabel='iteration',
                  ylabel='accuracy, %'),
             server=args.visdom_server, port=args.visdom_port)

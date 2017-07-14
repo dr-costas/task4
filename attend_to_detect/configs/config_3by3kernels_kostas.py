@@ -8,6 +8,8 @@ epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 
 grad_clip_norm = 0.
+alarm_loss_weight = 0.1
+vehicle_loss_weight = None # None for no weight
 
 # Optimizer parameters
 optimizer = Adam

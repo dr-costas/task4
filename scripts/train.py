@@ -51,7 +51,10 @@ def main():
         padding=config.common_padding,
         dropout=config.common_dropout,
         dilation=config.common_dilation,
-        activation=config.common_activation
+        activation=config.common_activation,
+        max_pool_kernel=config.common_max_pool_kernel,
+        max_pool_stride=config.common_max_pool_stride,
+        max_pool_padding=config.common_max_pool_padding
     )
 
     # The alarm branch layers

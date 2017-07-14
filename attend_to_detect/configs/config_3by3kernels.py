@@ -22,6 +22,9 @@ common_padding = (1, 1)
 common_dropout = 0.5
 common_dilation = (1, 1)
 common_activation = functional.leaky_relu
+common_max_pool_kernel = None
+common_max_pool_stride = None
+common_max_pool_padding = None
 
 # Variables needed for the alarm branch
 branch_alarm_channels_out = [40, 40, 40]

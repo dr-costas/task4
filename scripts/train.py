@@ -16,7 +16,7 @@ import torch
 from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output, get_data_stream)
+    vehicle_classes, alarm_classes, get_input, get_output, get_output_binary, get_data_stream)
 from attend_to_detect.model import CategoryBranch2, CommonFeatureExtractor
 from attend_to_detect.evaluation import validate, category_cost, accuracy
 
@@ -225,10 +225,10 @@ def train_loop(config, common_feature_extractor, branch_vehicle, branch_alarm,
             x = get_input(batch[0], scaler)
 
             # Get target values for alarm classes
-            y_alarm_1_hot, y_alarm_logits = get_output(batch[-2])
+            y_alarm_1_hot, y_alarm_logits = get_output_binary(batch[-2])
 
             # Get target values for vehicle classes
-            y_vehicle_1_hot, y_vehicle_logits = get_output(batch[-1])
+            y_vehicle_1_hot, y_vehicle_logits = get_output_binary(batch[-1])
 
             # Go through the common feature extractor
             common_features = common_feature_extractor(x)

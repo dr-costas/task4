@@ -110,3 +110,22 @@ def get_output(data, old_dataset=True):
         y_one_hot = y_one_hot.cuda()
         y_categorical = y_categorical.cuda()
     return y_one_hot, y_categorical
+
+
+def get_output_binary(data, old_dataset=True):
+    if old_dataset:
+        for i in range(len(data)):
+            data[i] = data[i].reshape(data[i].shape[1:])
+    y_one_hot = np.zeros((data.shape[0], data[0].shape[-1] - 1, 1))
+
+    for i, datum in enumerate(data):
+        non_zeros = [np.nonzero(dd) for dd in datum]
+        non_zeros = [n[0][0] for n in non_zeros]
+        for n in non_zeros:
+            if n > 0:
+                y_one_hot[i, n-1, 0] = 1
+
+    y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
+    if torch.has_cudnn:
+        y_one_hot = y_one_hot.cuda()
+    return y_one_hot, None

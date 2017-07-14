@@ -36,9 +36,13 @@ def accuracy(output, target):
 
 
 def binary_accuracy(output, target):
-    acc = torch.sum(((output >= 0.5).float() == target.float()).float(), -2) / float(output.size()[1])
-    acc = torch.sum(acc)/float(acc.size()[0])
-    return acc.cpu().data.numpy()[0]
+    return ((sigmoid(output) >= 0.5).float() == target.float())\
+        .float()\
+        .mean(-2)\
+        .mean()\
+        .cpu()\
+        .data\
+        .numpy()[0]
 
 
 def category_cost(out_hidden, target):

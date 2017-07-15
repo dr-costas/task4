@@ -64,7 +64,7 @@ def binary_category_cost(out_hidden, target, weight=None):
     return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat)
 
 
-def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
+def validate(valid_data, branch_alarm, branch_vehicle,
              scaler, logger, total_iterations, epoch):
     valid_batches = 0
     loss_a = 0.0
@@ -88,16 +88,13 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
         # Get target values for vehicle classes
         y_vehicle_1_hot, y_vehicle_logits = get_output_binary(batch[-1])
 
-        # Go through the common feature extractor
-        common_features = common_feature_extractor(x)
-
         # Go through the alarm branch
         alarm_output, alarm_weights = branch_alarm(
-            common_features, len(alarm_classes))
+            x, len(alarm_classes))
 
         # Go through the vehicle branch
         vehicle_output, vehicle_weights = branch_vehicle(
-            common_features, len(vehicle_classes))
+            x, len(vehicle_classes))
 
         # Calculate validation losses
         # Chopping of at the groundtruth length

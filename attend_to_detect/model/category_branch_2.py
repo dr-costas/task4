@@ -277,7 +277,6 @@ class CategoryBranch2(torch.nn.Module):
 
         return torch.cat(out_hidden, 1), out_weights
 
-
     def nb_trainable_parameters(self):
         # FIXME: add attention parameters
         s_1 = sum([

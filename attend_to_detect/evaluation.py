@@ -64,7 +64,190 @@ def binary_category_cost(out_hidden, target, weight=None):
     return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat)
 
 
-def validate(valid_data, branch_alarm, branch_vehicle,
+def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
+             scaler, logger, total_iterations, epoch):
+    valid_batches = 0
+    loss_a = 0.0
+    loss_v = 0.0
+
+    accuracy_a = 0.0
+    accuracy_v = 0.0
+
+    validation_start_time = timeit.timeit()
+    predictions_alarm = []
+    predictions_vehicle = []
+    ground_truths_alarm = []
+    ground_truths_vehicle = []
+    for batch in valid_data.get_epoch_iterator():
+        # Get input
+        x = get_input(batch[0], scaler, volatile=True)
+
+        # Get target values for alarm classes
+        y_alarm_1_hot, y_alarm_logits = get_output_binary(batch[-2])
+
+        # Get target values for vehicle classes
+        y_vehicle_1_hot, y_vehicle_logits = get_output_binary(batch[-1])
+
+        # Go through the common feature extractor
+        common_features = common_feature_extractor(x)
+
+        # Go through the alarm branch
+        alarm_output, alarm_weights = branch_alarm(
+            common_features, len(alarm_classes))
+
+        # Go through the vehicle branch
+        vehicle_output, vehicle_weights = branch_vehicle(
+            common_features, len(vehicle_classes))
+
+        # Calculate validation losses
+        # Chopping of at the groundtruth length
+
+        # alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)].contiguous()
+        # vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)].contiguous()
+
+        loss_a += binary_category_cost(alarm_output, y_alarm_1_hot).data[0]
+        loss_v += binary_category_cost(vehicle_output, y_vehicle_1_hot).data[0]
+
+        # accuracy_a += accuracy(alarm_output_aligned, y_alarm_logits)
+        # accuracy_v += accuracy(vehicle_output_aligned, y_vehicle_logits)
+        accuracy_a += binary_accuracy(alarm_output, y_alarm_1_hot)
+        accuracy_v += binary_accuracy(vehicle_output, y_vehicle_1_hot)
+
+        valid_batches += 1
+
+        if torch.has_cudnn:
+            alarm_output = alarm_output.cpu()
+            vehicle_output = vehicle_output.cpu()
+            y_alarm_1_hot = y_alarm_1_hot.cpu()
+            y_vehicle_1_hot = y_vehicle_1_hot.cpu()
+
+        predictions_alarm.extend(sigmoid(alarm_output).data.numpy())
+        predictions_vehicle.extend(sigmoid(vehicle_output).data.numpy())
+        ground_truths_alarm.extend(y_alarm_1_hot.data.numpy())
+        ground_truths_vehicle.extend(y_vehicle_1_hot.data.numpy())
+
+    print('Epoch {:4d} validation elapsed time {:10.5f}'
+          '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+                epoch, validation_start_time - timeit.timeit(),
+                loss_a/valid_batches, loss_v/valid_batches))
+    metrics = tagging_metrics_from_raw_output(
+        predictions_alarm, predictions_vehicle,
+        ground_truths_alarm, ground_truths_vehicle,
+        alarm_classes, vehicle_classes)
+    print(metrics)
+
+    # f_score_overall_alarm = metrics_alarm.overall_f_measure()
+    # f_score_overall_vehicle = metrics_vehicle.overall_f_measure()
+    logger.log({'iteration': total_iterations,
+                'epoch': epoch,
+                'records': {
+                    'valid_alarm': dict(
+                        loss=loss_a/valid_batches,
+                        acc=accuracy_a/valid_batches,
+                        # f_score=f_score_overall_alarm['f_measure'],
+                        # precision=f_score_overall_alarm['precision'],
+                        # recall=f_score_overall_alarm['recall']
+                    ),
+                    'valid_vehicle': dict(
+                        loss=loss_v/valid_batches,
+                        acc=accuracy_v/valid_batches,
+                        # f_score=f_score_overall_vehicle['f_measure'],
+                        # precision=f_score_overall_vehicle['precision'],
+                        # recall=f_score_overall_vehicle['recall']
+                    )}})
+
+
+def validate_separate_branches(valid_data, branch_alarm, branch_vehicle,
+             scaler, logger, total_iterations, epoch):
+    valid_batches = 0
+    loss_a = 0.0
+    loss_v = 0.0
+
+    accuracy_a = 0.0
+    accuracy_v = 0.0
+
+    validation_start_time = timeit.timeit()
+    predictions_alarm = []
+    predictions_vehicle = []
+    ground_truths_alarm = []
+    ground_truths_vehicle = []
+    for batch in valid_data.get_epoch_iterator():
+        # Get input
+        x = get_input(batch[0], scaler, volatile=True)
+
+        # Get target values for alarm classes
+        y_alarm_1_hot, y_alarm_logits = get_output_binary(batch[-2])
+
+        # Get target values for vehicle classes
+        y_vehicle_1_hot, y_vehicle_logits = get_output_binary(batch[-1])
+
+        # Go through the alarm branch
+        alarm_output, alarm_weights = branch_alarm(
+            x, len(alarm_classes))
+
+        # Go through the vehicle branch
+        vehicle_output, vehicle_weights = branch_vehicle(
+            x, len(vehicle_classes))
+
+        # Calculate validation losses
+        # Chopping of at the groundtruth length
+
+        # alarm_output_aligned = alarm_output[:, :y_alarm_logits.size(1)].contiguous()
+        # vehicle_output_aligned = vehicle_output[:, :y_vehicle_logits.size(1)].contiguous()
+
+        loss_a += binary_category_cost(alarm_output, y_alarm_1_hot).data[0]
+        loss_v += binary_category_cost(vehicle_output, y_vehicle_1_hot).data[0]
+
+        # accuracy_a += accuracy(alarm_output_aligned, y_alarm_logits)
+        # accuracy_v += accuracy(vehicle_output_aligned, y_vehicle_logits)
+        accuracy_a += binary_accuracy(alarm_output, y_alarm_1_hot)
+        accuracy_v += binary_accuracy(vehicle_output, y_vehicle_1_hot)
+
+        valid_batches += 1
+
+        if torch.has_cudnn:
+            alarm_output = alarm_output.cpu()
+            vehicle_output = vehicle_output.cpu()
+            y_alarm_1_hot = y_alarm_1_hot.cpu()
+            y_vehicle_1_hot = y_vehicle_1_hot.cpu()
+
+        predictions_alarm.extend(sigmoid(alarm_output).data.numpy())
+        predictions_vehicle.extend(sigmoid(vehicle_output).data.numpy())
+        ground_truths_alarm.extend(y_alarm_1_hot.data.numpy())
+        ground_truths_vehicle.extend(y_vehicle_1_hot.data.numpy())
+
+    print('Epoch {:4d} validation elapsed time {:10.5f}'
+          '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
+                epoch, validation_start_time - timeit.timeit(),
+                loss_a/valid_batches, loss_v/valid_batches))
+    metrics = tagging_metrics_from_raw_output(
+        predictions_alarm, predictions_vehicle,
+        ground_truths_alarm, ground_truths_vehicle,
+        alarm_classes, vehicle_classes)
+    print(metrics)
+
+    # f_score_overall_alarm = metrics_alarm.overall_f_measure()
+    # f_score_overall_vehicle = metrics_vehicle.overall_f_measure()
+    logger.log({'iteration': total_iterations,
+                'epoch': epoch,
+                'records': {
+                    'valid_alarm': dict(
+                        loss=loss_a/valid_batches,
+                        acc=accuracy_a/valid_batches,
+                        # f_score=f_score_overall_alarm['f_measure'],
+                        # precision=f_score_overall_alarm['precision'],
+                        # recall=f_score_overall_alarm['recall']
+                    ),
+                    'valid_vehicle': dict(
+                        loss=loss_v/valid_batches,
+                        acc=accuracy_v/valid_batches,
+                        # f_score=f_score_overall_vehicle['f_measure'],
+                        # precision=f_score_overall_vehicle['precision'],
+                        # recall=f_score_overall_vehicle['recall']
+                    )}})
+
+
+def validate_single_branch(valid_data, branch_alarm, branch_vehicle,
              scaler, logger, total_iterations, epoch):
     valid_batches = 0
     loss_a = 0.0

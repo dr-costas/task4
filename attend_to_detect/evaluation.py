@@ -51,13 +51,18 @@ def binary_accuracy(output, target):
         .numpy()[0]
 
 
-def binary_accuracy_single(output, target):
+def binary_accuracy_single(output, target, is_valid=False):
 
-    a1 = ((sigmoid(output) >= 0.5).float() == target.float()).float()
-    a2 = a1 / np.array(all_freqs)
-    a2 = a2.mean(-2).cpu().data.numpy()[0]
+    acc = ((sigmoid(output) >= 0.5).float() == target.float()).float()
+    if not is_valid:
+        weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
+        weights = torch.autograd.Variable(torch.from_numpy(weights).float())
+        if torch.has_cudnn:
+            weights = weights.cuda()
+        acc = acc / weights.expand_as(acc)
+    acc = acc.mean(-2).cpu().data.numpy()[0]
 
-    return a2
+    return acc
 
 
 def category_cost(out_hidden, target):
@@ -79,10 +84,58 @@ def binary_category_cost(out_hidden, target, weight=None):
     return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat)
 
 
-def binary_category_cost_single(out_hidden, target, weight=None):
-    if weight is not None:
-        return torch.nn.functional.binary_cross_entropy(torch.nn.functional.sigmoid(out_hidden), target)
-    return torch.nn.functional.binary_cross_entropy(torch.nn.functional.sigmoid(out_hidden), target)
+def flatten(x):
+    return x.view(x.size(0) * x.size(1), -1)
+
+
+def deflatten(x, shape):
+    return x.view(shape[0], shape[1], x.size(1))
+
+
+def per_example_cross_entropy(x, targets):
+    flat_x = flatten(x)
+    flat_logits = torch.nn.functional.sigmoid(flat_x)
+    logits = deflatten(flat_logits, x.size())
+    targets = deflatten(targets.view(-1, 1), x.size())
+    loss = -torch.gather(logits, 2, targets)
+    loss = loss.mean(dim=0)
+    return loss
+
+
+def manual_b_entropy(pred, true, weights):
+    local_pred = pred.view(pred.size()[:-1])
+    local_true = true.view(true.size()[:-1])
+    local_weights = weights.view(weights.size()[:-1])
+
+    r = torch.autograd.Variable(torch.zeros(pred.size()).float())
+
+    for i, (t, o, w) in enumerate(zip(local_true, local_pred, local_weights)):
+        r[i, :] = w * (t*torch.log(o)) + (1 - t) * torch.log(1 - o)
+
+    return r
+
+
+def binary_category_cost_single(out_hidden, target, weight=None, is_valid=False):
+    weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
+    weights = torch.autograd.Variable(torch.from_numpy(1.0/weights).float())
+    if torch.has_cudnn:
+        weights = weights.cuda()
+    a_term = target * weights.expand_as(target)
+    b_term = (1-target) * (1-weights.expand_as(target))
+    weight = a_term + b_term
+    local_pred = out_hidden.view(out_hidden.size()[:-1])
+    local_true = target.view(target.size()[:-1])
+    local_weights = weight.view(weight.size()[:-1])
+
+    r = torch.autograd.Variable(torch.zeros(out_hidden.size()).float())
+
+    for i, (t, o, w) in enumerate(zip(local_true, local_pred, local_weights)):
+        r[i, :] = w * (t*torch.log(o)) + (1 - t) * torch.log(1 - o) + EPS
+
+    return r.mean()
+
+    # return torch.nn.functional.binary_cross_entropy(torch.nn.functional.sigmoid(out_hidden), target,
+    #                                                 weight=weight[0, :, :])
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -273,7 +326,7 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
 
         loss += binary_category_cost_single(output, y_1_hot).data[0]
         # loss += loss_fn(output, y_1_hot).data[0]
-        accuracy += binary_accuracy_single(output, y_1_hot)
+        accuracy += binary_accuracy_single(output, y_1_hot, is_valid=True)
 
         valid_batches += 1
 

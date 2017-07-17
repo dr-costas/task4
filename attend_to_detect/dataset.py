@@ -55,7 +55,7 @@ def padder(data):
 
 def padder_single(data):
     data = list(data)
-    for index in [0, -2, -1]:
+    for index in [0]:
         max_ts = np.max([datum.shape[-2] for datum in data[index]])
 
         for i in range(len(data[index])):
@@ -85,6 +85,29 @@ def get_data_stream(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
 
     stream = DataStream(dataset=dataset, iteration_scheme=scheme)
     stream = Mapping(stream, mapping=padder)
+
+    if calculate_scaling_metrics:
+        for data in stream.get_epoch_iterator():
+            for example in data[0]:
+                if old_dataset:
+                    scaler.partial_fit(example.reshape(example.shape[1:]))
+
+        return stream, scaler
+    return stream, None
+
+
+def get_data_stream_single(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
+                    that_set='train', calculate_scaling_metrics=True, old_dataset=True,
+                    examples=None):
+    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
+    if examples is None:
+        examples = dataset.num_examples
+    scheme = ShuffledScheme(examples=examples, batch_size=batch_size)
+
+    scaler = StandardScaler()
+
+    stream = DataStream(dataset=dataset, iteration_scheme=scheme)
+    stream = Mapping(stream, mapping=padder_single)
 
     if calculate_scaling_metrics:
         for data in stream.get_epoch_iterator():
@@ -151,20 +174,32 @@ def get_output_binary(data, old_dataset=True):
     return y_one_hot, None
 
 
-def get_output_binary_single(data, old_dataset=True):
+def get_output_binary_single(data_a, data_v, old_dataset=True):
     if old_dataset:
-        for i in range(len(data)):
-            data[i] = data[i].reshape(data[i].shape[1:])
-    y_one_hot = np.zeros((data.shape[0], data[0].shape[-1] - 1, 1))
+        for i in range(len(data_a)):
+            data_a[i] = data_a[i].reshape(data_a[i].shape[1:])
+        for i in range(len(data_v)):
+            data_v[i] = data_v[i].reshape(data_v[i].shape[1:])
 
-    for i, datum in enumerate(data):
+    total_classes = data_a[0].shape[-1] - 1
+    total_classes += data_v[0].shape[-1] - 1
+    binarized_classes = np.zeros((data_a.shape[0], total_classes, 1))
+
+    for i, datum in enumerate(data_a):
         non_zeros = [np.nonzero(dd) for dd in datum]
         non_zeros = [n[0][0] for n in non_zeros]
         for n in non_zeros:
             if n > 0:
-                y_one_hot[i, n-1, 0] = 1
+                binarized_classes[i, n - 1, 0] = 1
 
-    y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
+    for i, datum in enumerate(data_v):
+        non_zeros = [np.nonzero(dd) for dd in datum]
+        non_zeros = [n[0][0] for n in non_zeros]
+        for n in non_zeros:
+            if n > 0:
+                binarized_classes[i, n + data_a[0].shape[-1] - 2, 0] = 1
+
+    binarized_classes = Variable(torch.from_numpy(binarized_classes).float(), requires_grad=False)
     if torch.has_cudnn:
-        y_one_hot = y_one_hot.cuda()
-    return y_one_hot, None
+        binarized_classes = binarized_classes.cuda()
+    return binarized_classes

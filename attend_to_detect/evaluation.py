@@ -5,11 +5,17 @@ from torch.nn.functional import cross_entropy, binary_cross_entropy, sigmoid
 from sed_eval.sound_event import SegmentBasedMetrics
 
 from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output_binary)
+    vehicle_classes, alarm_classes, get_input, get_output_binary, get_output_binary_single)
 
 
 MAX_VALIDATION_LEN = 5
 EPS = 1e-5
+
+class_freqs_alarm = [383., 341., 192., 260., 574., 2557., 2491., 1533., 695.]
+
+class_freqs_vehicle = [2073., 1646., 27218., 3882., 3962., 7492., 3426., 2256.]
+
+all_freqs = class_freqs_alarm + class_freqs_vehicle
 
 
 def accuracy(output, target):
@@ -37,12 +43,21 @@ def accuracy(output, target):
 
 def binary_accuracy(output, target):
     return ((sigmoid(output) >= 0.5).float() == target.float())\
-        .float()\
+        .float() / np.array(all_freqs)\
         .mean(-2)\
         .mean()\
         .cpu()\
         .data\
         .numpy()[0]
+
+
+def binary_accuracy_single(output, target):
+
+    a1 = ((sigmoid(output) >= 0.5).float() == target.float()).float()
+    a2 = a1 / np.array(all_freqs)
+    a2 = a2.mean(-2).cpu().data.numpy()[0]
+
+    return a2
 
 
 def category_cost(out_hidden, target):
@@ -57,11 +72,17 @@ def total_cost(hiddens, targets):
 
 
 def binary_category_cost(out_hidden, target, weight=None):
-    out_hidden_flat = out_hidden.view(-1, out_hidden.size(2))
+    out_hidden_flat = out_hidden.view(-1, out_hidden.size(1))
     target_flat = target.view(-1)
     if weight is not None:
         return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat, weight=target.data + weight)
     return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat)
+
+
+def binary_category_cost_single(out_hidden, target, weight=None):
+    if weight is not None:
+        return torch.nn.functional.binary_cross_entropy(torch.nn.functional.sigmoid(out_hidden), target)
+    return torch.nn.functional.binary_cross_entropy(torch.nn.functional.sigmoid(out_hidden), target)
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -239,18 +260,20 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
     validation_start_time = timeit.timeit()
     predictions = []
     ground_truths = []
+    # loss_fn = torch.nn.MSELoss()
     for batch in valid_data.get_epoch_iterator():
         # Get input
         x = get_input(batch[0], scaler, volatile=True)
 
         # Get target values for alarm classes
-        y_1_hot, y_logits = get_output_binary(batch[-2])
+        y_1_hot = get_output_binary_single(batch[-2], batch[-1])
 
         # Go through the alarm branch
         output, attention_weights = network(x, len(alarm_classes) + len(vehicle_classes))
 
-        loss += binary_category_cost(output, y_1_hot).data[0]
-        accuracy += binary_accuracy(output, y_1_hot)
+        loss += binary_category_cost_single(output, y_1_hot).data[0]
+        # loss += loss_fn(output, y_1_hot).data[0]
+        accuracy += binary_accuracy_single(output, y_1_hot)
 
         valid_batches += 1
 

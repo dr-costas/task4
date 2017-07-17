@@ -15,9 +15,10 @@ import torch
 from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output_binary, get_data_stream)
+    vehicle_classes, alarm_classes, get_input, get_output_binary_single, get_data_stream)
 from attend_to_detect.model import CategoryBranch2
-from attend_to_detect.evaluation import validate_single_branch, binary_category_cost, binary_accuracy
+from attend_to_detect.evaluation import validate_single_branch, \
+    binary_category_cost_single, binary_accuracy_single
 
 __docformat__ = 'reStructuredText'
 
@@ -65,6 +66,8 @@ def main():
         attention_bias=config.network_attention_bias,
         init=config.network_init
     )
+
+    print('Total parameters: {}'.format(network.nb_trainable_parameters()))
 
     # Check if we have GPU, and if we do then GPU them all
     if torch.has_cudnn:
@@ -163,6 +166,7 @@ def iterate_params(pytorch_module):
 def train_loop(config, network, train_data, valid_data, scaler,
                optim, print_grads, logger, checkpoint_path, no_tqdm):
     total_iterations = 0
+    # loss_module = torch.nn.MSELoss()
     for epoch in range(config.epochs):
         network.train()
         losses = []
@@ -177,16 +181,14 @@ def train_loop(config, network, train_data, valid_data, scaler,
             x = get_input(batch[0], scaler)
 
             # Get target values for alarm classes
-            y_1_hot, y_logits = get_output_binary(batch[-2])
-
-            # Get target values for alarm classes
-            y_1_hot_2, y_logits_2 = get_output_binary(batch[-1])
+            y_1_hot = get_output_binary_single(batch[-2], batch[-1])
 
             # Go through the alarm branch
             network_output, attention_weights = network(x, len(alarm_classes) + len(vehicle_classes))
 
             # Calculate losses, do backward passing, and do updates
-            loss = binary_category_cost(network_output, y_1_hot, weight=config.network_loss_weight)
+            loss = binary_category_cost_single(network_output, y_1_hot, weight=config.network_loss_weight)
+            # loss = loss_module(network_output, y_1_hot)
 
             optim.zero_grad()
             loss.backward()
@@ -204,7 +206,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             losses.append(loss.data[0])
 
-            accuracies.append(binary_accuracy(network_output, y_1_hot))
+            accuracies.append(binary_accuracy_single(network_output, y_1_hot))
 
             if total_iterations % 10 == 0:
                 logger.log({
@@ -219,7 +221,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             total_iterations += 1
 
-        print('Epoch {:4d} elapsed training time {:10.5f} | Losses: {:10.6f}'.format(
+        print('Epoch {:3d} | Elapsed training time {:10.3f} | Loss: {:10.6f}'.format(
                 epoch, epoch_start_time - timeit.timeit(),
                 np.mean(losses)))
 

@@ -6,6 +6,7 @@ from functools import reduce
 import torch
 from torch.autograd import Variable
 from torch.nn.init import xavier_normal, constant, orthogonal
+import numpy as np
 
 from .attention import GaussianAttention
 
@@ -278,17 +279,11 @@ class CategoryBranch2(torch.nn.Module):
         return torch.cat(out_hidden, 1), out_weights
 
     def nb_trainable_parameters(self):
-        # FIXME: add attention parameters
-        s_1 = sum([
-            reduce(mul, layer.weight.size(), 1) for layer in
-            self.bn_layers + self.cnn_layers
-        ])
-        s_2 = sum([
-            reduce(mul, layer.weight_hh.size(), 1) +
-            reduce(mul, layer.weight_ih.size(), 1) for layer in
-            self.rnn_layers_f + self.rnn_layers_b
-        ])
-        return s_1 + s_2
+        nb_params = 0
+        for param in self.parameters():
+            nb_params += np.product(param.size())
+
+        return nb_params
 
 
 def main():

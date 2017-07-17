@@ -53,6 +53,26 @@ def padder(data):
     return data
 
 
+def padder_single(data):
+    data = list(data)
+    for index in [0, -2, -1]:
+        max_ts = np.max([datum.shape[-2] for datum in data[index]])
+
+        for i in range(len(data[index])):
+            len_dif = max_ts - data[index][i].shape[-2]
+            if len_dif > 0:
+                data[index][i] = np.concatenate((
+                    data[index][i],
+                    np.zeros((1, len_dif, data[index][i].shape[-1]))),
+                    axis=-2
+                )
+                if index != 0:
+                    data[index][i][:, -len_dif:, 0] = 1
+    data = tuple(data)
+
+    return data
+
+
 def get_data_stream(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
                     that_set='train', calculate_scaling_metrics=True, old_dataset=True,
                     examples=None):
@@ -113,6 +133,25 @@ def get_output(data, old_dataset=True):
 
 
 def get_output_binary(data, old_dataset=True):
+    if old_dataset:
+        for i in range(len(data)):
+            data[i] = data[i].reshape(data[i].shape[1:])
+    y_one_hot = np.zeros((data.shape[0], data[0].shape[-1] - 1, 1))
+
+    for i, datum in enumerate(data):
+        non_zeros = [np.nonzero(dd) for dd in datum]
+        non_zeros = [n[0][0] for n in non_zeros]
+        for n in non_zeros:
+            if n > 0:
+                y_one_hot[i, n-1, 0] = 1
+
+    y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
+    if torch.has_cudnn:
+        y_one_hot = y_one_hot.cuda()
+    return y_one_hot, None
+
+
+def get_output_binary_single(data, old_dataset=True):
     if old_dataset:
         for i in range(len(data)):
             data[i] = data[i].reshape(data[i].shape[1:])

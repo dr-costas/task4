@@ -3,7 +3,9 @@
 # cache files for sublime text
 *.tmlanguage.cache
 *.tmPreferences.cache
-*.stTheme.cache
+*.stTheme.cache=
+
+scripts/scaler.pkl
 
 # workspace files are user-specific
 *.sublime-workspace

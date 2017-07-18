@@ -147,6 +147,12 @@ def binary_category_cost_single(out_hidden, target, weight=None, is_valid=False)
     #                                                 weight=weight[0, :, :])
 
 
+def multi_label_loss(y_pred, y_true):
+    out_hidden_summed = y_pred.sum(1).squeeze()
+    # FIXME add weights!
+    return binary_cross_entropy(sigmoid(out_hidden_summed), y_true)
+
+
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
              scaler, logger, total_iterations, epoch):
     valid_batches = 0

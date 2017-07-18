@@ -221,9 +221,13 @@ def get_output_binary_one_hot(data_a, data_v):
 
     for i in range(len(data_a)):
         datum = np.zeros((max_i, total_classes))
-        datum[:len(data_a[i]) - 1, 1:len(alarm_classes) + 1] = data_a[i][:-1, 1:]
-        datum[len(data_a[i]) - 1:-1, -len(vehicle_classes):] = data_v[i][:-1, 1:]
-        datum[-1, 0] = 1
+        l_l = 0
+        u_l = l_l + data_a[i].shape[0] - 1
+        datum[l_l:u_l, 1:len(alarm_classes) + 1] = data_a[i][:-1, 1:]
+        l_l += u_l
+        u_l = l_l + data_v[i].shape[0] - 1
+        datum[l_l:u_l, -len(vehicle_classes):] = data_v[i][:-1, 1:]
+        datum[u_l:, 0] = 1
 
         non_zeros = [np.nonzero(dd) for dd in datum]
         non_zeros = [n[0][0] for n in non_zeros]

@@ -52,13 +52,12 @@ def binary_accuracy(output, target):
 
 
 def binary_accuracy_single(output, target, is_valid=False):
-
+    output = output.sum(1).view(output.size(0), output.size(2))
     acc = ((sigmoid(output) >= 0.5).float() == target.float()).float()
     if not is_valid:
         weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
         weights = torch.autograd.Variable(torch.from_numpy(weights).float())
-        if torch.has_cudnn:
-            weights = weights.cuda()
+        weights = weights.type_as(acc)
         acc = acc / weights.expand_as(acc)
     acc = acc.mean(-2).cpu().data.numpy()[0]
 

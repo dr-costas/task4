@@ -84,6 +84,28 @@ def binary_category_cost(out_hidden, target, weight=None):
     return binary_cross_entropy(sigmoid(out_hidden_flat), target_flat)
 
 
+def binary_accuracy_single_multi_label_approach(output, target):
+
+    out = torch.zeros(output.size()).float()
+    _, indices = torch.max(output.data[0], -1)
+
+    for i, index in enumerate(indices):
+        for i2, index2 in enumerate(index):
+            out[i, i2, index2] = 1.0
+
+    out = torch.autograd.Variable(out.sum(1).squeeze()/out.size()[1])
+    if torch.has_cudnn:
+        out = out.cuda()
+
+    acc = (out == target.float()).float()
+    acc = acc.mean(-2).mean()
+
+    if torch.has_cudnn:
+        acc = acc.cpu().data[0]
+
+    return acc
+
+
 def flatten(x):
     return x.view(x.size(0) * x.size(1), -1)
 

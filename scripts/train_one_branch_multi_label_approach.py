@@ -14,12 +14,11 @@ from tqdm import tqdm
 import torch
 from torch.nn.utils import clip_grad_norm
 
-from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output_binary_one_hot, get_data_stream_single,
-    get_output_binary_single)
+from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, \
+    get_output_binary_one_hot, get_data_stream_single
 from attend_to_detect.model import CategoryBranch2
-from attend_to_detect.evaluation import validate_single_branch, \
-    binary_category_cost_single, binary_accuracy_single, manual_b_entropy, multi_label_loss
+from attend_to_detect.evaluation import validate_single_branch_multi_label_approach, \
+    binary_accuracy_single_multi_label_approach, multi_label_loss
 
 __docformat__ = 'reStructuredText'
 
@@ -193,8 +192,6 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             # Calculate losses, do backward passing, and do updates
             loss = multi_label_loss(torch.nn.functional.softmax(network_output), target_values)
-            # loss = manual_b_entropy(network_output, y_1_hot)
-            # loss = loss_module(network_output, y_1_hot)
 
             optim.zero_grad()
             loss.backward()
@@ -212,7 +209,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             losses.append(loss.data[0])
 
-            accuracies.append(binary_accuracy_single(network_output, target_values))
+            accuracies.append(binary_accuracy_single_multi_label_approach(network_output, target_values))
 
             if total_iterations % 10 == 0:
                 logger.log({
@@ -227,13 +224,13 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             total_iterations += 1
 
-        print('Epoch {:3d} | Elapsed training time {:10.3f} | Loss: {:10.6f}'.format(
-                epoch, epoch_start_time - time.time(),
+        print('Epoch {:3d} | Elapsed training time {:10.3f} sec(s) | Loss: {:10.6f}'.format(
+                epoch, time.time() - epoch_start_time,
                 np.mean(losses)))
 
         # Validation
         network.eval()
-        validate_single_branch(valid_data, network, scaler, logger, total_iterations, epoch)
+        validate_single_branch_multi_label_approach(valid_data, network, scaler, logger, total_iterations, epoch)
 
         # Checkpoint
         ckpt = {'network': network.state_dict(),

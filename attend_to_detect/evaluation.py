@@ -1,11 +1,12 @@
 import numpy as np
-import timeit
+import time
 import torch
 from torch.nn.functional import cross_entropy, binary_cross_entropy, sigmoid
 from sed_eval.sound_event import SegmentBasedMetrics
 
 from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output_binary, get_output_binary_single)
+    vehicle_classes, alarm_classes, get_input, get_output_binary, get_output_binary_single,
+    get_output_binary_one_hot)
 
 
 MAX_VALIDATION_LEN = 5
@@ -93,7 +94,7 @@ def binary_accuracy_single_multi_label_approach(output, target):
         for i2, index2 in enumerate(index):
             out[i, i2, index2] = 1.0
 
-    out = torch.autograd.Variable(out.sum(1).squeeze()/out.size()[1])
+    out = torch.autograd.Variable(out.sum(1).squeeze())
     if torch.has_cudnn:
         out = out.cuda()
 
@@ -101,9 +102,9 @@ def binary_accuracy_single_multi_label_approach(output, target):
     acc = acc.mean(-2).mean()
 
     if torch.has_cudnn:
-        acc = acc.cpu().data[0]
+        acc = acc.cpu()
 
-    return acc
+    return acc.data[0]
 
 
 def flatten(x):
@@ -184,7 +185,7 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
     accuracy_a = 0.0
     accuracy_v = 0.0
 
-    validation_start_time = timeit.timeit()
+    validation_start_time = time.time()
     predictions_alarm = []
     predictions_vehicle = []
     ground_truths_alarm = []
@@ -237,9 +238,9 @@ def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
         ground_truths_alarm.extend(y_alarm_1_hot.data.numpy())
         ground_truths_vehicle.extend(y_vehicle_1_hot.data.numpy())
 
-    print('Epoch {:4d} validation elapsed time {:10.5f}'
+    print('Epoch {:4d} validation elapsed time {:10.5f} sec(s)'
           '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
-                epoch, validation_start_time - timeit.timeit(),
+                epoch, time.time() - validation_start_time,
                 loss_a/valid_batches, loss_v/valid_batches))
     metrics = tagging_metrics_from_raw_output(
         predictions_alarm, predictions_vehicle,
@@ -277,7 +278,7 @@ def validate_separate_branches(valid_data, branch_alarm, branch_vehicle,
     accuracy_a = 0.0
     accuracy_v = 0.0
 
-    validation_start_time = timeit.timeit()
+    validation_start_time = time.time()
     predictions_alarm = []
     predictions_vehicle = []
     ground_truths_alarm = []
@@ -319,9 +320,9 @@ def validate_separate_branches(valid_data, branch_alarm, branch_vehicle,
         ground_truths_alarm.extend(y_alarm_1_hot.data.numpy())
         ground_truths_vehicle.extend(y_vehicle_1_hot.data.numpy())
 
-    print('Epoch {:4d} validation elapsed time {:10.5f}'
+    print('Epoch {:4d} validation elapsed time {:10.5f} sec(s)'
           '\n\tValid. loss alarm: {:10.6f} | vehicle: {:10.6f} '.format(
-                epoch, validation_start_time - timeit.timeit(),
+                epoch, time.time() - validation_start_time,
                 loss_a/valid_batches, loss_v/valid_batches))
     metrics = tagging_metrics_from_raw_output(
         predictions_alarm, predictions_vehicle,
@@ -347,7 +348,7 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
     loss = 0.0
     accuracy = 0.0
 
-    validation_start_time = timeit.timeit()
+    validation_start_time = time.time()
     predictions = []
     ground_truths = []
     # loss_fn = torch.nn.MSELoss()
@@ -359,10 +360,9 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
         y_1_hot = get_output_binary_single(batch[-2], batch[-1])
 
         # Go through the alarm branch
-        output, attention_weights = network(x, len(alarm_classes) + len(vehicle_classes))
+        output, attention_weights = network(x, y_1_hot.shape[1])
 
         loss += manual_b_entropy(output, y_1_hot).data[0]
-        # loss += loss_fn(output, y_1_hot).data[0]
         accuracy += binary_accuracy_single(output, y_1_hot, is_valid=True)
 
         valid_batches += 1
@@ -374,10 +374,60 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
         predictions.extend(sigmoid(output).data.numpy())
         ground_truths.extend(y_1_hot.data.numpy())
 
-    print('Epoch {:4d} validation elapsed time {:10.5f} | Valid. loss alarm: {:10.6f}'.format(
-                epoch, validation_start_time - timeit.timeit(),
+    print('Epoch {:4d} validation elapsed time {:10.5f} sec(s) | Valid. loss alarm: {:10.6f}'.format(
+                epoch, time.time() - validation_start_time,
                 loss/valid_batches))
     metrics = tagging_metrics_from_raw_output_single(
+        predictions, ground_truths, alarm_classes + vehicle_classes)
+    print(metrics)
+
+    logger.log({'iteration': total_iterations,
+                'epoch': epoch,
+                'records': {
+                    'validation': dict(
+                        loss=loss/valid_batches,
+                        acc=accuracy/valid_batches
+                    )
+                }})
+
+
+def validate_single_branch_multi_label_approach(valid_data, network, scaler, logger, total_iterations, epoch):
+    valid_batches = 0
+    loss = 0.0
+    accuracy = 0.0
+
+    validation_start_time = time.time()
+    predictions = []
+    ground_truths = []
+    # loss_fn = torch.nn.MSELoss()
+    for batch in valid_data.get_epoch_iterator():
+        # Get input
+        x = get_input(batch[0], scaler, volatile=True)
+
+        # Get target values for alarm classes
+        y_1_hot, y_categorical = get_output_binary_one_hot(batch[-2], batch[-1])
+
+        # Go through the alarm branch
+        output, attention_weights = network(x, y_1_hot.shape[1])
+        target_values = torch.autograd.Variable(torch.from_numpy(y_1_hot.sum(axis=1)).float())
+        if torch.has_cudnn:
+            target_values = target_values.cuda()
+
+        loss += multi_label_loss(torch.nn.functional.softmax(output), target_values).data[0]
+        accuracy += binary_accuracy_single_multi_label_approach(output, target_values)
+
+        valid_batches += 1
+
+        if torch.has_cudnn:
+            output = output.cpu()
+
+        predictions.extend(torch.nn.functional.softmax(output).data.numpy())
+        ground_truths.extend(y_1_hot)
+
+    print('Epoch {:4d} validation elapsed time {:10.5f} sec(s) | Valid. loss alarm: {:10.6f}'.format(
+                epoch, time.time() - validation_start_time,
+                loss/valid_batches))
+    metrics = tagging_metrics_from_raw_output_single_multi_label(
         predictions, ground_truths, alarm_classes + vehicle_classes)
     print(metrics)
 
@@ -508,6 +558,53 @@ def tagging_metrics_from_raw_output_single(y_pred, y_true, all_labels):
                             'event_offset': 10.00,
                             'event_onset': 00.00,
                             'event_label': the_labels[i]
+                        }
+                    )
+            all_files_list.append(file_list)
+
+        return all_files_list
+
+    data_pred = []
+    for f_data_a in get_data(y_pred, all_labels):
+        data_pred.append(f_data_a)
+
+    data_true = []
+    for f_data_a in get_data(y_true, all_labels):
+        data_true.append(f_data_a)
+
+    return tagging_metrics_from_list(data_pred, data_true, all_labels)
+
+
+def tagging_metrics_from_raw_output_single_multi_label(y_pred, y_true, all_labels):
+    """
+
+    If 1-hot-encoding, the value [1, 0, 0, ..., 0] is considered <EOS>. \
+    If not 1-hot-encoded, the value 0 is considered <EOS>.
+
+    :param y_pred: List with predictions, of len = nb_files and each element \
+                   is a matrix of size [nb_events_detected x nb_labels]
+    :type y_pred: numpy.core.multiarray.ndarray
+    :param y_true: List with true values, of len = nb_files. If 1-hot-enconding \
+                   each element is a matrix of size [nb_events x nb_labels] . \
+                   Else, each element is an array of len = nb_events.
+    :type y_true: numpy.core.multiarray.ndarray
+    :param all_labels: A list with all the labels **including** the <EOS> at the 0th index
+    :type all_labels: list[str]
+    :return:
+    :rtype:
+    """
+    def get_data(the_data, the_labels):
+        all_files_list = []
+
+        for file_data in the_data:
+            file_list = []
+            for i in np.argmax(file_data, axis=-1):
+                if i != 0:
+                    file_list.append(
+                        {
+                            'event_offset': 10.00,
+                            'event_onset': 00.00,
+                            'event_label': the_labels[i-1]
                         }
                     )
             all_files_list.append(file_list)

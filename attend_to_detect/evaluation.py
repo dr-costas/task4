@@ -56,7 +56,7 @@ def binary_accuracy_single(output, target, is_valid=False):
     target = target[:, 1:]
     acc = ((sigmoid(output) >= 0.5).float() == target.float()).float()
     if not is_valid:
-        weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
+        weights = np.array(all_freqs).reshape(1, len(all_freqs))
         weights = torch.autograd.Variable(torch.from_numpy(weights).float())
         weights = weights.type_as(acc)
         acc = acc / weights.expand_as(acc)

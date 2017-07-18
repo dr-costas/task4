@@ -273,7 +273,7 @@ class CategoryBranch2(torch.nn.Module):
             attended, weights, kappa = self.attention(hidden, output, kappa)
             hidden = self.decoder_cell(attended, hidden)
 
-            out_hidden.append(self.output_linear(hidden).unsqueeze(1))
+            out_hidden.append(torch.nn.functional.softmax(self.output_linear(hidden).unsqueeze(1)))
             out_weights.append(weights)
 
         return torch.cat(out_hidden, 1), out_weights

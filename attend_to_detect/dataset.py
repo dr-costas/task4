@@ -203,3 +203,31 @@ def get_output_binary_single(data_a, data_v, old_dataset=True):
     if torch.has_cudnn:
         binarized_classes = binarized_classes.cuda()
     return binarized_classes
+
+
+def get_output_binary_one_hot(data_a, data_v):
+    max_i = 0
+    for i in range(len(data_a)):
+        data_a[i] = data_a[i].reshape(data_a[i].shape[1:])
+        data_v[i] = data_v[i].reshape(data_v[i].shape[1:])
+        current_i = data_a[i].shape[0] + data_v[i].shape[0] - 1
+        if max_i <= current_i:
+            max_i = current_i
+
+    total_classes = len(alarm_classes) + len(vehicle_classes) + 1
+
+    y_one_hot = np.zeros((data_a.shape[0], max_i, total_classes))
+    y_categorical = np.zeros((data_a.shape[0], max_i))
+
+    for i in range(len(data_a)):
+        datum = np.zeros((max_i, total_classes))
+        datum[:len(data_a[i]) - 1, 1:len(alarm_classes) + 1] = data_a[i][:-1, 1:]
+        datum[len(data_a[i]) - 1:-1, -len(vehicle_classes):] = data_v[i][:-1, 1:]
+        datum[-1, 0] = 1
+
+        non_zeros = [np.nonzero(dd) for dd in datum]
+        non_zeros = [n[0][0] for n in non_zeros]
+        y_categorical[i, :] = non_zeros
+        y_one_hot[i, :, :] = datum
+
+    return y_one_hot, y_categorical

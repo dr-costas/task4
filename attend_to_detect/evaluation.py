@@ -102,17 +102,26 @@ def per_example_cross_entropy(x, targets):
     return loss
 
 
-def manual_b_entropy(pred, true, weights):
+def manual_b_entropy(pred, true):
+    weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
+    weights = torch.autograd.Variable(torch.from_numpy(1.0 / weights).float())
+    if torch.has_cudnn:
+        weights = weights.cuda()
     local_pred = pred.view(pred.size()[:-1])
     local_true = true.view(true.size()[:-1])
-    local_weights = weights.view(weights.size()[:-1])
+    local_weights = weights.view(weights.size()[:-1]).expand_as(local_true)
 
-    r = torch.autograd.Variable(torch.zeros(pred.size()).float())
+    s = sigmoid(local_pred)
 
-    for i, (t, o, w) in enumerate(zip(local_true, local_pred, local_weights)):
-        r[i, :] = w * (t*torch.log(o)) + (1 - t) * torch.log(1 - o)
+    r = local_weights * (local_true*torch.log(s)) + \
+        (1 - local_true) * torch.log(1 - s)
 
-    return r
+    # r = torch.autograd.Variable(torch.zeros(pred.size()).float())
+    #
+    # for i, (t, o, w) in enumerate(zip(local_true, local_pred, local_weights)):
+    #     r[i, :] = w * (t*torch.log(o)) + (1 - t) * torch.log(1 - o)
+
+    return (-r.sum(0)).mean()
 
 
 def binary_category_cost_single(out_hidden, target, weight=None, is_valid=False):
@@ -130,7 +139,7 @@ def binary_category_cost_single(out_hidden, target, weight=None, is_valid=False)
     r = torch.autograd.Variable(torch.zeros(out_hidden.size()).float())
 
     for i, (t, o, w) in enumerate(zip(local_true, local_pred, local_weights)):
-        r[i, :] = w * (t*torch.log(o)) + (1 - t) * torch.log(1 - o) + EPS
+        r[i, :] = w * (t*torch.log(o + EPS)) + (1 - t) * torch.log(1 - o + EPS) + EPS
 
     return r.mean()
 
@@ -324,7 +333,7 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
         # Go through the alarm branch
         output, attention_weights = network(x, len(alarm_classes) + len(vehicle_classes))
 
-        loss += binary_category_cost_single(output, y_1_hot).data[0]
+        loss += manual_b_entropy(output, y_1_hot).data[0]
         # loss += loss_fn(output, y_1_hot).data[0]
         accuracy += binary_accuracy_single(output, y_1_hot, is_valid=True)
 

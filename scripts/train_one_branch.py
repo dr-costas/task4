@@ -15,10 +15,10 @@ import torch
 from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output_binary_single, get_data_stream)
+    vehicle_classes, alarm_classes, get_input, get_output_binary_one_hot, get_data_stream_single, get_output_binary_single)
 from attend_to_detect.model import CategoryBranch2
 from attend_to_detect.evaluation import validate_single_branch, \
-    binary_category_cost_single, binary_accuracy_single
+    binary_category_cost_single, binary_accuracy_single, manual_b_entropy
 
 __docformat__ = 'reStructuredText'
 
@@ -62,7 +62,7 @@ def main():
         dropout_rnn_recurrent=config.network_dropout_rnn_recurrent,
         rnn_subsamplings=config.network_rnn_subsamplings,
         decoder_dim=config.network_decoder_dim,
-        output_classes=1,
+        output_classes=len(alarm_classes) + len(vehicle_classes),
         attention_bias=config.network_attention_bias,
         init=config.network_init
     )
@@ -96,13 +96,13 @@ def main():
     if os.path.isfile('scaler.pkl'):
         with open('scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
-        train_data, _ = get_data_stream(
+        train_data, _ = get_data_stream_single(
             dataset_name=config.dataset_full_path,
             batch_size=config.batch_size,
             calculate_scaling_metrics=False,
             examples=examples)
     else:
-        train_data, scaler = get_data_stream(
+        train_data, scaler = get_data_stream_single(
             dataset_name=config.dataset_full_path,
             batch_size=config.batch_size,
             calculate_scaling_metrics=True,
@@ -112,7 +112,7 @@ def main():
             pickle.dump(scaler, f)
 
     # Get the validation data stream
-    valid_data, _ = get_data_stream(
+    valid_data, _ = get_data_stream_single(
         dataset_name=config.dataset_full_path,
         batch_size=config.batch_size,
         that_set='test',
@@ -187,7 +187,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             network_output, attention_weights = network(x, len(alarm_classes) + len(vehicle_classes))
 
             # Calculate losses, do backward passing, and do updates
-            loss = binary_category_cost_single(network_output, y_1_hot, weight=config.network_loss_weight)
+            loss = manual_b_entropy(network_output, y_1_hot)
             # loss = loss_module(network_output, y_1_hot)
 
             optim.zero_grad()

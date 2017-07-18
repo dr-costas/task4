@@ -15,10 +15,11 @@ import torch
 from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import (
-    vehicle_classes, alarm_classes, get_input, get_output_binary_one_hot, get_data_stream_single, get_output_binary_single)
+    vehicle_classes, alarm_classes, get_input, get_output_binary_one_hot, get_data_stream_single,
+    get_output_binary_single)
 from attend_to_detect.model import CategoryBranch2
 from attend_to_detect.evaluation import validate_single_branch, \
-    binary_category_cost_single, binary_accuracy_single, manual_b_entropy
+    binary_category_cost_single, binary_accuracy_single, manual_b_entropy, multi_label_loss
 
 __docformat__ = 'reStructuredText'
 
@@ -62,7 +63,7 @@ def main():
         dropout_rnn_recurrent=config.network_dropout_rnn_recurrent,
         rnn_subsamplings=config.network_rnn_subsamplings,
         decoder_dim=config.network_decoder_dim,
-        output_classes=len(alarm_classes) + len(vehicle_classes),
+        output_classes=len(alarm_classes) + len(vehicle_classes) + 1,
         attention_bias=config.network_attention_bias,
         init=config.network_init
     )
@@ -181,13 +182,18 @@ def train_loop(config, network, train_data, valid_data, scaler,
             x = get_input(batch[0], scaler)
 
             # Get target values for alarm classes
-            y_1_hot = get_output_binary_single(batch[-2], batch[-1])
+            y_1_hot, y_categorical = get_output_binary_one_hot(batch[-2], batch[-1])
 
             # Go through the alarm branch
-            network_output, attention_weights = network(x, len(alarm_classes) + len(vehicle_classes))
+            network_output, attention_weights = network(x, y_1_hot.shape[1])
+
+            target_values = torch.autograd.Variable(torch.from_numpy(y_1_hot.sum(axis=1)).float())
+            if torch.has_cudnn:
+                target_values = target_values.cuda()
 
             # Calculate losses, do backward passing, and do updates
-            loss = manual_b_entropy(network_output, y_1_hot)
+            loss = multi_label_loss(torch.nn.functional.softmax(network_output), target_values)
+            # loss = manual_b_entropy(network_output, y_1_hot)
             # loss = loss_module(network_output, y_1_hot)
 
             optim.zero_grad()
@@ -206,7 +212,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             losses.append(loss.data[0])
 
-            accuracies.append(binary_accuracy_single(network_output, y_1_hot))
+            accuracies.append(binary_accuracy_single(network_output, target_values))
 
             if total_iterations % 10 == 0:
                 logger.log({

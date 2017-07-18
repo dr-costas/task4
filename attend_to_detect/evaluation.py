@@ -52,7 +52,7 @@ def binary_accuracy(output, target):
 
 
 def binary_accuracy_single(output, target, is_valid=False):
-    output = output.sum(1).view(output.size(0), output.size(2))
+    output = output.sum(1).view(output.size(0), output.size(2), 1)[:, 1:, :]
     acc = ((sigmoid(output) >= 0.5).float() == target.float()).float()
     if not is_valid:
         weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)

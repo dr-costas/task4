@@ -15,7 +15,7 @@ optimizer = Adam
 optimizer_lr = 1e-3
 
 # Variables needed for the alarm branch
-network_channels_out = [32, 64, 128, 256]
+network_channels_out = [32, 64]
 network_cnn_kernel_sizes = [(5, 5), (3, 5)]
 network_cnn_strides = [(1, 1), (1, 2)]
 network_cnn_paddings = [(0, 0), (0, 1)]

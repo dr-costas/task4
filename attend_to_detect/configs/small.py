@@ -25,7 +25,7 @@ network_pool_kernels = [(5, 5), (5, 5)]
 network_pool_strides = [(1, 2), (2, 2)]
 network_pool_paddings = [(0, 1), (1, 1)]
 
-network_rnn_input_size = 256
+network_rnn_input_size = 1408
 network_rnn_output_dims = [128]
 network_rnn_activations = [functional.tanh]
 network_attention_bias = True

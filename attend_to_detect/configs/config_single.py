@@ -31,7 +31,7 @@ network_rnn_activations = [functional.tanh, functional.tanh]
 network_attention_bias = True
 network_init = xavier_uniform
 
-network_dropout_cnn = 0.25
+network_dropout_cnn = 0.0
 network_dropout_rnn_input = 0.25
 network_dropout_rnn_recurrent = 0.0
 

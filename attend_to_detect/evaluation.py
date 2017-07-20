@@ -88,18 +88,18 @@ def binary_category_cost(out_hidden, target, weight=None):
 def binary_accuracy_single_multi_label_approach(output, target):
 
     out = torch.zeros(output.size()).float()
-    _, indices = torch.max(output.data[0], -1)
+    _, indices = torch.max(output.data, -1)
 
     for i, index in enumerate(indices):
         for i2, index2 in enumerate(index):
-            out[i, i2, index2] = 1.0
+            out[i, i2, index2[0]] = 1.0
 
     out = torch.autograd.Variable(out.sum(1).squeeze())
     if torch.has_cudnn:
         out = out.cuda()
 
     acc = (out == target.float()).float()
-    acc = acc.mean(-2).mean()
+    acc = (acc.sum(-1) == acc.size()[-1]).float().mean()
 
     if torch.has_cudnn:
         acc = acc.cpu()
@@ -170,10 +170,48 @@ def binary_category_cost_single(out_hidden, target, weight=None, is_valid=False)
     #                                                 weight=weight[0, :, :])
 
 
+def binary_cross_entropy_with_logits(input, target, weight=None, size_average=True):
+    r"""Function that measures Binary Cross Entropy between target and output
+    logits:
+    See :class:`~torch.nn.BCEWithLogitsLoss` for details.
+    Args:
+        input: Variable of arbitrary shape
+        target: Variable of the same shape as input
+        weight (Variable, optional): a manual rescaling weight
+                if provided it's repeated to match input tensor shape
+        size_average (bool, optional): By default, the losses are averaged
+                over observations for each minibatch. However, if the field
+                sizeAverage is set to False, the losses are instead summed
+                for each minibatch.
+    """
+    if not target.is_same_size(input):
+        raise ValueError("Target size ({}) must be the same as input size ({})".format(target.size(), input.size()))
+
+    if weight is not None and target.dim() != 1:
+        weight = weight.view(1, target.size(1)).expand_as(target)
+
+    neg_abs = - input.abs()
+    loss = input.clamp(min=0) - input * target + (1 + neg_abs.exp()).log()
+
+    if weight is not None:
+        loss = loss * weight
+
+    if size_average:
+        return loss.mean()
+    else:
+        return loss.sum()
+
+
 def multi_label_loss(y_pred, y_true):
     out_hidden_summed = y_pred.sum(1).squeeze()
-    # FIXME add weights!
-    return binary_cross_entropy(sigmoid(out_hidden_summed), y_true)
+    local_weights = [50000.0 / a for a in all_freqs]
+    weights = np.array([1.] + local_weights).reshape(1, len(all_freqs) + 1, 1)
+    weights = torch.autograd.Variable(torch.from_numpy(weights).float())
+    if torch.has_cudnn:
+        weights = weights.cuda()
+    return binary_cross_entropy_with_logits(out_hidden_summed, y_true, weights)
+    # return binary_cross_entropy_with_logits(out_hidden_summed, y_true)
+    # return torch.nn.binary_cross_entropy(sigmoid(out_hidden_summed), y_true)
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -408,7 +446,7 @@ def validate_single_branch_multi_label_approach(valid_data, network, scaler, log
         y_1_hot, y_categorical = get_output_binary_one_hot(batch[-2], batch[-1])
 
         # Go through the alarm branch
-        output, attention_weights = network(x, y_1_hot.shape[1])
+        output, attention_weights = network(x[:, :, :, :64], y_1_hot.shape[1])
         target_values = torch.autograd.Variable(torch.from_numpy(y_1_hot.sum(axis=1)).float())
         if torch.has_cudnn:
             target_values = target_values.cuda()
@@ -424,7 +462,7 @@ def validate_single_branch_multi_label_approach(valid_data, network, scaler, log
         predictions.extend(torch.nn.functional.softmax(output).data.numpy())
         ground_truths.extend(y_1_hot)
 
-    print('Epoch {:4d} validation elapsed time {:10.5f} sec(s) | Valid. loss alarm: {:10.6f}'.format(
+    print('Epoch {:3d} | Elapsed valid. time {:10.3f} sec(s) | Valid. loss: {:10.6f}'.format(
                 epoch, time.time() - validation_start_time,
                 loss/valid_batches))
     metrics = tagging_metrics_from_raw_output_single_multi_label(

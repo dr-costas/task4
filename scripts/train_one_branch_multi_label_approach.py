@@ -74,7 +74,7 @@ def main():
         network = network.cuda()
 
     # Create optimizer for all parameters
-    optim = config.optimizer(network.parameters(), lr=config.optimizer_lr)
+    optim = config.optimizer(network.parameters(), lr=config.optimizer_lr, weight_decay=1e-6)
 
     # Do we have a checkpoint?
     if os.path.isdir(args.checkpoint_path):
@@ -177,6 +177,8 @@ def train_loop(config, network, train_data, valid_data, scaler,
             epoch_iterator = tqdm(epoch_iterator,
                                   total=50000 // config.batch_size)
         for iteration, batch in epoch_iterator:
+            if print_grads:
+                it_start_time = time.time()
             # Get input
             x = get_input(batch[0], scaler)
 
@@ -184,7 +186,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             y_1_hot, y_categorical = get_output_binary_one_hot(batch[-2], batch[-1])
 
             # Go through the alarm branch
-            network_output, attention_weights = network(x, y_1_hot.shape[1])
+            network_output, attention_weights = network(x[:, :, :, :64], y_1_hot.shape[1])
 
             target_values = torch.autograd.Variable(torch.from_numpy(y_1_hot.sum(axis=1)).float())
             if torch.has_cudnn:
@@ -197,19 +199,33 @@ def train_loop(config, network, train_data, valid_data, scaler,
             loss.backward()
 
             if config.grad_clip_norm > 0:
-                clip_grad_norm(network, config.grad_clip_norm)
+                clip_grad_norm(network.parameters(), config.grad_clip_norm)
 
             optim.step()
 
             if print_grads:
+                e_time = time.time() - it_start_time
+                to_print = []
                 for param, name, module in iterate_params(network):
-                    print("{}\t\t {}\t\t: grad norm {}\t\t weight norm {}".format(
-                        name, str(module), param.grad.norm(2).data[0],
-                        param.norm(2).data[0]))
+                    m_name = str(module)
+                    if len(m_name) > 40:
+                        m_name = m_name[:37] + '...'
+                    tmp_s = "{:9s} - {:-<40s}: Grad norm {:.5E} | Weight norm {:5E}".format(
+                        name, m_name, param.grad.norm(2).data[0],
+                        param.norm(2).data[0]/np.sqrt(np.prod(param.size())))
+                    to_print.append(tmp_s)
+                print('Iteration: {:5d} | Elapsed time {}'.format(total_iterations, e_time))
+                for t_p in to_print:
+                    print(t_p)
+                print('-'*len(to_print[0]))
 
             losses.append(loss.data[0])
 
-            accuracies.append(binary_accuracy_single_multi_label_approach(network_output, target_values))
+            accuracies.append(
+                binary_accuracy_single_multi_label_approach(
+                    torch.nn.functional.softmax(network_output), target_values
+                )
+            )
 
             if total_iterations % 10 == 0:
                 logger.log({
@@ -224,7 +240,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             total_iterations += 1
 
-        print('Epoch {:3d} | Elapsed training time {:10.3f} sec(s) | Loss: {:10.6f}'.format(
+        print('Epoch {:3d} | Elapsed train. time {:10.3f} sec(s) | Train. loss: {:10.6f}'.format(
                 epoch, time.time() - epoch_start_time,
                 np.mean(losses)))
 

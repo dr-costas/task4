@@ -1,6 +1,6 @@
 from torch.optim import Adam
 from torch.nn import functional
-from torch.nn.init import orthogonal, xavier_uniform
+from torch.nn.init import orthogonal, xavier_uniform, xavier_normal
 
 # General variables
 batch_size = 64
@@ -12,24 +12,34 @@ network_loss_weight = None
 
 # Optimizer parameters
 optimizer = Adam
-optimizer_lr = 1e-3
+optimizer_lr = 1e-4
 
 # Variables needed for the alarm branch
-network_channels_out = [32, 64, 128, 256]
-network_cnn_kernel_sizes = [(5, 5), (3, 5), (3, 3), (3, 3)]
-network_cnn_strides = [(1, 1), (1, 2), (2, 2), (2, 2)]
-network_cnn_paddings = [(0, 0), (0, 1), (0, 1), (0, 0)]
-network_cnn_activations = [functional.leaky_relu, functional.leaky_relu, functional.leaky_relu, functional.leaky_relu]
+# network_channels_out = [128, 128, 128, 128]
+# network_cnn_kernel_sizes = [(5, 5), (3, 5), (3, 3), (3, 3)]
+# network_cnn_strides = [(1, 1), (1, 2), (2, 2), (2, 2)]
+# network_cnn_paddings = [(0, 0), (0, 1), (0, 1), (0, 0)]
+# network_cnn_activations = [functional.leaky_relu, functional.leaky_relu, functional.leaky_relu, functional.leaky_relu]
+#
+# network_pool_kernels = [(5, 5), (5, 5), (5, 5), (5, 5)]
+# network_pool_strides = [(1, 2), (2, 2), (2, 2), (2, 3)]
+# network_pool_paddings = [(0, 1), (1, 1), (0, 1), (0, 2)]
 
-network_pool_kernels = [(5, 5), (5, 5), (5, 5), (5, 5)]
-network_pool_strides = [(1, 2), (2, 2), (2, 2), (2, 3)]
-network_pool_paddings = [(0, 1), (1, 1), (0, 1), (0, 2)]
+network_channels_out = [128, 256, 512]  # , 128]
+network_cnn_kernel_sizes = [(3, 3), (3, 3), (3, 3)]  # , (3, 3)]
+network_cnn_strides = [(2, 2), (2, 2), (2, 2)]  # , (2, 2)]
+network_cnn_paddings = [(1, 1), (1, 1), (1, 1)]  # , (1, 1)]
+network_cnn_activations = [functional.leaky_relu, functional.leaky_relu, functional.leaky_relu]  # , functional.leaky_relu]
 
-network_rnn_input_size = 256
-network_rnn_output_dims = [128, 128]
-network_rnn_activations = [functional.tanh, functional.tanh]
+network_pool_kernels = [(3, 3), (3, 3), (3, 3)]  # , (3, 3)]
+network_pool_strides = [(2, 2), (2, 2), (2, 2)]  # , (2, 2)]
+network_pool_paddings = [(1, 1), (1, 1), (1, 1)]  # , (1, 1)]
+
+network_rnn_input_size = 512
+network_rnn_output_dims = [256, 256, 256]
+network_rnn_activations = [functional.tanh, functional.tanh, functional.tanh]
 network_attention_bias = True
-network_init = xavier_uniform
+network_init = xavier_normal
 
 network_dropout_cnn = 0.25
 network_dropout_rnn_input = 0.25
@@ -37,6 +47,6 @@ network_dropout_rnn_recurrent = 0.0
 
 network_rnn_subsamplings = [1]
 
-network_decoder_dim = 128
+network_decoder_dim = 256
 
 # EOF

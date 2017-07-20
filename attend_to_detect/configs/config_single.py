@@ -27,7 +27,7 @@ l2_factor = 1e-4
 # network_pool_strides = [(1, 2), (2, 2), (2, 2), (2, 3)]
 # network_pool_paddings = [(0, 1), (1, 1), (0, 1), (0, 2)]
 
-network_channels_out = [64, 128, 256]  # , 128]
+network_channels_out = [128, 128, 128]  # , 128]
 network_cnn_kernel_sizes = [(3, 3), (3, 3), (3, 3)]  # , (3, 3)]
 network_cnn_strides = [(2, 2), (2, 2), (2, 2)]  # , (2, 2)]
 network_cnn_paddings = [(1, 1), (1, 1), (1, 1)]  # , (1, 1)]
@@ -37,7 +37,7 @@ network_pool_kernels = [(3, 3), (3, 3), (3, 3)]  # , (3, 3)]
 network_pool_strides = [(2, 2), (2, 2), (2, 2)]  # , (2, 2)]
 network_pool_paddings = [(1, 1), (1, 1), (1, 1)]  # , (1, 1)]
 
-network_rnn_input_size = 256
+network_rnn_input_size = 128
 network_rnn_output_dims = [128, 128]  #, 256]
 network_rnn_activations = [functional.tanh, functional.tanh]  #, functional.tanh]
 network_attention_bias = True

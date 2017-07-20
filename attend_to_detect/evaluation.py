@@ -6,7 +6,7 @@ from sed_eval.sound_event import SegmentBasedMetrics
 
 from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output_binary, get_output_binary_single,
-    get_output_binary_one_hot)
+    get_output_binary_one_hot, get_output_one_hot)
 
 
 MAX_VALIDATION_LEN = 5
@@ -16,7 +16,8 @@ class_freqs_alarm = [383., 341., 192., 260., 574., 2557., 2491., 1533., 695.]
 
 class_freqs_vehicle = [2073., 1646., 27218., 3882., 3962., 7492., 3426., 2256.]
 
-all_freqs = class_freqs_alarm + class_freqs_vehicle
+all_freqs_alarms_first = class_freqs_alarm + class_freqs_vehicle
+all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 
 
 def accuracy(output, target):
@@ -44,7 +45,7 @@ def accuracy(output, target):
 
 def binary_accuracy(output, target):
     return ((sigmoid(output) >= 0.5).float() == target.float())\
-        .float() / np.array(all_freqs)\
+        .float() / np.array(all_freqs_alarms_first)\
         .mean(-2)\
         .mean()\
         .cpu()\
@@ -57,7 +58,7 @@ def binary_accuracy_single(output, target, is_valid=False):
     target = target[:, 1:]
     acc = ((sigmoid(output) >= 0.5).float() == target.float()).float()
     if not is_valid:
-        weights = np.array(all_freqs).reshape(1, len(all_freqs))
+        weights = np.array(all_freqs_alarms_first).reshape(1, len(all_freqs_alarms_first))
         weights = torch.autograd.Variable(torch.from_numpy(weights).float())
         weights = weights.type_as(acc)
         acc = acc / weights.expand_as(acc)
@@ -107,6 +108,24 @@ def binary_accuracy_single_multi_label_approach(output, target):
     return acc.data[0]
 
 
+def accuracy_single_one_hot(output, target):
+
+    acc = 0
+
+    for i in range(output.size()[1]):
+        s = torch.nn.functional.softmax(output[:, i, :])
+        _, m = s.max(-1)
+        s = torch.autograd.Variable(torch.zeros(m.size()))
+        if torch.has_cudnn:
+            s = s.cuda()
+        for ii, e in enumerate(m):
+            s[ii] = e
+
+        acc += (s.squeeze() == target[:, i]).float().sum()/target.size()[0]
+
+    return (acc/target.size()[1]).data[0]
+
+
 def flatten(x):
     return x.view(x.size(0) * x.size(1), -1)
 
@@ -126,7 +145,7 @@ def per_example_cross_entropy(x, targets):
 
 
 def manual_b_entropy(pred, true):
-    weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
+    weights = np.array(all_freqs_alarms_first).reshape(1, len(all_freqs_alarms_first), 1)
     weights = torch.autograd.Variable(torch.from_numpy(50000 / weights).float())
     if torch.has_cudnn:
         weights = weights.cuda()
@@ -148,7 +167,7 @@ def manual_b_entropy(pred, true):
 
 
 def binary_category_cost_single(out_hidden, target, weight=None, is_valid=False):
-    weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
+    weights = np.array(all_freqs_alarms_first).reshape(1, len(all_freqs_alarms_first), 1)
     weights = torch.autograd.Variable(torch.from_numpy(1.0/weights).float())
     if torch.has_cudnn:
         weights = weights.cuda()
@@ -205,14 +224,31 @@ def binary_cross_entropy_with_logits(input, target, weight=None, size_average=Tr
 def multi_label_loss(y_pred, y_true, use_weights):
     out_hidden_summed = y_pred.sum(1).squeeze()
     if use_weights:
-        local_weights = [30000.0 / a for a in all_freqs]
-        weights = np.array([1.] + local_weights).reshape(1, len(all_freqs) + 1, 1)
+        local_weights = [30000.0 / a for a in all_freqs_alarms_first]
+        weights = np.array([1.] + local_weights).reshape(1, len(all_freqs_alarms_first) + 1, 1)
         weights = torch.autograd.Variable(torch.from_numpy(weights).float())
         if torch.has_cudnn:
             weights = weights.cuda()
         return binary_cross_entropy_with_logits(out_hidden_summed, y_true, weights)
     else:
         return binary_cross_entropy_with_logits(out_hidden_summed, y_true)
+
+
+def loss_one_hot_single(y_pred, y_true, use_weights):
+    if use_weights:
+        local_weights = [1000000.0 / a for a in all_freqs_vehicles_first]
+        weights = torch.ones(y_pred.size()[-1]).float()/0.5
+        local_weights = torch.from_numpy(np.array(local_weights))
+        weights[1::2] = local_weights
+        if torch.has_cudnn:
+            weights = weights.cuda()
+    else:
+        weights = None
+    return torch.nn.functional.cross_entropy(
+        y_pred.view(y_pred.size()[0] * y_pred.size()[1], y_pred.size()[-1]),
+        y_true.view(y_true.size()[0] * y_true.size()[1]).long(),
+        weight=weights
+    )
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -481,6 +517,69 @@ def validate_single_branch_multi_label_approach(valid_data, network, scaler, log
                 }})
 
 
+def validate_single_one_hot(valid_data, network, scaler, logger, total_iterations,
+                                                epoch, use_weights):
+    valid_batches = 0
+    loss = 0.0
+    accuracy = 0.0
+
+    validation_start_time = time.time()
+    predictions = []
+    ground_truths = []
+    # loss_fn = torch.nn.MSELoss()
+    for batch in valid_data.get_epoch_iterator():
+        # Get input
+        x = get_input(batch[0], scaler, volatile=True)
+
+        # Get target values for alarm classes
+        y_1_hot, y_categorical = get_output_one_hot(batch[-2], batch[-1])
+
+        # Go through the alarm branch
+        # output, attention_weights = network(x, y_1_hot.size()[1])
+        output, attention_weights = network(x[:, :, :, :64], y_1_hot.size()[1])
+
+        loss += loss_one_hot_single(output, y_categorical, use_weights).data[0]
+        accuracy += accuracy_single_one_hot(output, y_categorical)
+
+        valid_batches += 1
+
+        for i in range(len(output)):
+            output[i, :, :] = torch.nn.functional.softmax(output[i, :, :])
+
+        if torch.has_cudnn:
+            output = output.cpu()
+            y_1_hot = y_1_hot.cpu()
+
+        y_1_hot = y_1_hot.data.numpy()
+
+        output = output.data.numpy()
+        arg_max = np.argmax(output, axis=-1)
+
+        for i in range(len(output)):
+            for ii in range(len(output[i])):
+                output[i, ii, :] = 0
+                output[i, ii, arg_max[i, ii]] = 1
+
+        predictions.extend(output[:, :, 1::2])
+        ground_truths.extend(y_1_hot[:, :, 1::2])
+
+    print('Epoch {:3d} | Elapsed valid. time {:10.3f} sec(s) | Valid. loss: {:10.6f}'.format(
+                epoch, time.time() - validation_start_time,
+                loss/valid_batches))
+    metrics = tagging_metrics_one_hot(
+        predictions, ground_truths, alarm_classes + vehicle_classes)
+    print(metrics)
+
+    logger.log({'iteration': total_iterations,
+                'epoch': epoch,
+                'records': {
+                    'validation': dict(
+                        loss=loss/valid_batches,
+                        acc=accuracy/valid_batches
+                    )
+                }})
+
+
 def tagging_metrics_from_list(y_pred_dict, y_true_dict, all_labels):
     """
 
@@ -647,6 +746,52 @@ def tagging_metrics_from_raw_output_single_multi_label(y_pred, y_true, all_label
                             'event_label': the_labels[i-1]
                         }
                     )
+            all_files_list.append(file_list)
+
+        return all_files_list
+
+    data_pred = []
+    for f_data_a in get_data(y_pred, all_labels):
+        data_pred.append(f_data_a)
+
+    data_true = []
+    for f_data_a in get_data(y_true, all_labels):
+        data_true.append(f_data_a)
+
+    return tagging_metrics_from_list(data_pred, data_true, all_labels)
+
+
+def tagging_metrics_one_hot(y_pred, y_true, all_labels):
+    """
+
+    If 1-hot-encoding, the value [1, 0, 0, ..., 0] is considered <EOS>. \
+    If not 1-hot-encoded, the value 0 is considered <EOS>.
+
+    :param y_pred: List with predictions, of len = nb_files and each element \
+                   is a matrix of size [nb_events_detected x nb_labels]
+    :type y_pred: numpy.core.multiarray.ndarray
+    :param y_true: List with true values, of len = nb_files. If 1-hot-enconding \
+                   each element is a matrix of size [nb_events x nb_labels] . \
+                   Else, each element is an array of len = nb_events.
+    :type y_true: numpy.core.multiarray.ndarray
+    :param all_labels: A list with all the labels **including** the <EOS> at the 0th index
+    :type all_labels: list[str]
+    :return:
+    :rtype:
+    """
+    def get_data(the_data, the_labels):
+        all_files_list = []
+
+        for file_data in the_data:
+            file_list = []
+            for i in np.nonzero(np.sum(file_data, axis=-2))[0]:
+                file_list.append(
+                    {
+                        'event_offset': 10.00,
+                        'event_onset': 00.00,
+                        'event_label': the_labels[i]
+                    }
+                )
             all_files_list.append(file_list)
 
         return all_files_list

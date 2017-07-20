@@ -74,7 +74,7 @@ def main():
         network = network.cuda()
 
     # Create optimizer for all parameters
-    optim = config.optimizer(network.parameters(), lr=config.optimizer_lr, weight_decay=1e-6)
+    optim = config.optimizer(network.parameters(), lr=config.optimizer_lr)  #, weight_decay=1e-6)
 
     # Do we have a checkpoint?
     if os.path.isdir(args.checkpoint_path):
@@ -194,6 +194,19 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             # Calculate losses, do backward passing, and do updates
             loss = multi_label_loss(torch.nn.functional.softmax(network_output), target_values)
+
+            reg_loss_l2 = 0
+            reg_loss_l1 = 0
+
+            l2_factor = 0.01
+            l1_factor = 0.01
+
+            for param in network.parameters():
+                reg_loss_l2 += torch.sum(l2_factor * (param ** 2))
+                reg_loss_l1 += torch.sum(l1_factor * torch.abs(param))
+
+            loss += reg_loss_l2
+            loss += reg_loss_l1
 
             optim.zero_grad()
             loss.backward()

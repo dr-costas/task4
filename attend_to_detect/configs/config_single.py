@@ -12,7 +12,7 @@ network_loss_weight = None
 
 # Optimizer parameters
 optimizer = Adam
-optimizer_lr = 1e-4
+optimizer_lr = 1e-3
 
 # Variables needed for the alarm branch
 # network_channels_out = [128, 128, 128, 128]

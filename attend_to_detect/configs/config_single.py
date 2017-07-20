@@ -36,8 +36,8 @@ network_pool_strides = [(2, 2), (2, 2), (2, 2)]  # , (2, 2)]
 network_pool_paddings = [(1, 1), (1, 1), (1, 1)]  # , (1, 1)]
 
 network_rnn_input_size = 512
-network_rnn_output_dims = [256, 256, 256]
-network_rnn_activations = [functional.tanh, functional.tanh, functional.tanh]
+network_rnn_output_dims = [256, 256]  #, 256]
+network_rnn_activations = [functional.tanh, functional.tanh]  #, functional.tanh]
 network_attention_bias = True
 network_init = xavier_normal
 

@@ -193,20 +193,23 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 target_values = target_values.cuda()
 
             # Calculate losses, do backward passing, and do updates
-            loss = multi_label_loss(torch.nn.functional.softmax(network_output), target_values)
+            loss = multi_label_loss(
+                torch.nn.functional.softmax(network_output),
+                target_values,
+                config.network_loss_weight
+            )
 
-            reg_loss_l2 = 0
             reg_loss_l1 = 0
-
-            l2_factor = 0.01
-            l1_factor = 0.01
+            reg_loss_l2 = 0
 
             for param in network.parameters():
-                reg_loss_l2 += torch.sum(l2_factor * param.pow(2))
-                reg_loss_l1 += torch.sum(l1_factor * param.abs())
+                if config.l1_factor > 0.0:
+                    reg_loss_l1 += torch.sum(config.l1_factor * torch.abs(param))
+                if config.l2_factor > 0.0:
+                    reg_loss_l2 += torch.sum(config.l2_factor * torch.pow(param, 2))
 
-            loss += reg_loss_l2
             loss += reg_loss_l1
+            loss += reg_loss_l2
 
             optim.zero_grad()
             loss.backward()

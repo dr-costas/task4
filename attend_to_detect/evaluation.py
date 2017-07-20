@@ -202,16 +202,17 @@ def binary_cross_entropy_with_logits(input, target, weight=None, size_average=Tr
         return loss.sum()
 
 
-def multi_label_loss(y_pred, y_true):
+def multi_label_loss(y_pred, y_true, use_weights):
     out_hidden_summed = y_pred.sum(1).squeeze()
-    local_weights = [50000.0 / a for a in all_freqs]
-    weights = np.array([1.] + local_weights).reshape(1, len(all_freqs) + 1, 1)
-    weights = torch.autograd.Variable(torch.from_numpy(weights).float())
-    if torch.has_cudnn:
-        weights = weights.cuda()
-    return binary_cross_entropy_with_logits(out_hidden_summed, y_true, weights)
-    # return binary_cross_entropy_with_logits(out_hidden_summed, y_true)
-    # return torch.nn.binary_cross_entropy(sigmoid(out_hidden_summed), y_true)
+    if use_weights:
+        local_weights = [50000.0 / a for a in all_freqs]
+        weights = np.array([1.] + local_weights).reshape(1, len(all_freqs) + 1, 1)
+        weights = torch.autograd.Variable(torch.from_numpy(weights).float())
+        if torch.has_cudnn:
+            weights = weights.cuda()
+        return binary_cross_entropy_with_logits(out_hidden_summed, y_true, weights)
+    else:
+        return binary_cross_entropy_with_logits(out_hidden_summed, y_true)
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,

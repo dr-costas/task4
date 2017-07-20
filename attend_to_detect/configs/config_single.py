@@ -7,12 +7,14 @@ batch_size = 64
 epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 
-grad_clip_norm = 0.
-network_loss_weight = None
+grad_clip_norm = 1.
+network_loss_weight = False
 
 # Optimizer parameters
 optimizer = Adam
 optimizer_lr = 1e-4
+l1_factor = 1e-4
+l2_factor = 1e-4
 
 # Variables needed for the alarm branch
 # network_channels_out = [128, 128, 128, 128]

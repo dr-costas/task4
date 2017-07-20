@@ -202,8 +202,8 @@ def train_loop(config, network, train_data, valid_data, scaler,
             l1_factor = 0.01
 
             for param in network.parameters():
-                reg_loss_l2 += torch.sum(l2_factor * (param ** 2))
-                reg_loss_l1 += torch.sum(l1_factor * torch.abs(param))
+                reg_loss_l2 += param.pow(2).mul(l2_factor).sum().data[0]
+                reg_loss_l1 += param.abs().mul(l1_factor).sum().data[0]
 
             loss += reg_loss_l2
             loss += reg_loss_l1

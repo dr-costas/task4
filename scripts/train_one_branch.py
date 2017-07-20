@@ -63,7 +63,7 @@ def main():
         dropout_rnn_recurrent=config.network_dropout_rnn_recurrent,
         rnn_subsamplings=config.network_rnn_subsamplings,
         decoder_dim=config.network_decoder_dim,
-        output_classes=len(alarm_classes) + len(vehicle_classes) + 1,
+        output_classes=1,
         attention_bias=config.network_attention_bias,
         init=config.network_init
     )
@@ -182,7 +182,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             x = get_input(batch[0], scaler)
 
             # Get target values for alarm classes
-            y_1_hot, y_categorical = get_output_binary_one_hot(batch[-2], batch[-1])
+            y_1_hot = get_output_binary_single(batch[-2], batch[-1])
 
             # Go through the alarm branch
             network_output, attention_weights = network(x, y_1_hot.shape[1])
@@ -192,9 +192,21 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 target_values = target_values.cuda()
 
             # Calculate losses, do backward passing, and do updates
-            loss = multi_label_loss(torch.nn.functional.softmax(network_output), target_values)
-            # loss = manual_b_entropy(network_output, y_1_hot)
+            # loss = multi_label_loss(torch.nn.functional.softmax(network_output), target_values)
+            loss = manual_b_entropy(network_output, y_1_hot)
             # loss = loss_module(network_output, y_1_hot)
+
+            reg_loss_l1 = 0
+            reg_loss_l2 = 0
+
+            for param in network.parameters():
+                if config.l1_factor > 0.0:
+                    reg_loss_l1 += torch.sum(config.l1_factor * torch.abs(param))
+                if config.l2_factor > 0.0:
+                    reg_loss_l2 += torch.sum(config.l2_factor * torch.pow(param, 2))
+
+            loss += reg_loss_l1
+            loss += reg_loss_l2
 
             optim.zero_grad()
             loss.backward()

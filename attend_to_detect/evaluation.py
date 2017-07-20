@@ -127,7 +127,7 @@ def per_example_cross_entropy(x, targets):
 
 def manual_b_entropy(pred, true):
     weights = np.array(all_freqs).reshape(1, len(all_freqs), 1)
-    weights = torch.autograd.Variable(torch.from_numpy(1.0 / weights).float())
+    weights = torch.autograd.Variable(torch.from_numpy(50000 / weights).float())
     if torch.has_cudnn:
         weights = weights.cuda()
     local_pred = pred.view(pred.size()[:-1])
@@ -205,7 +205,7 @@ def binary_cross_entropy_with_logits(input, target, weight=None, size_average=Tr
 def multi_label_loss(y_pred, y_true, use_weights):
     out_hidden_summed = y_pred.sum(1).squeeze()
     if use_weights:
-        local_weights = [50000.0 / a for a in all_freqs]
+        local_weights = [30000.0 / a for a in all_freqs]
         weights = np.array([1.] + local_weights).reshape(1, len(all_freqs) + 1, 1)
         weights = torch.autograd.Variable(torch.from_numpy(weights).float())
         if torch.has_cudnn:

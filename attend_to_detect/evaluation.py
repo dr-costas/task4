@@ -430,7 +430,8 @@ def validate_single_branch(valid_data, network, scaler, logger, total_iterations
                 }})
 
 
-def validate_single_branch_multi_label_approach(valid_data, network, scaler, logger, total_iterations, epoch):
+def validate_single_branch_multi_label_approach(valid_data, network, scaler, logger, total_iterations,
+                                                epoch, use_weights):
     valid_batches = 0
     loss = 0.0
     accuracy = 0.0
@@ -452,7 +453,7 @@ def validate_single_branch_multi_label_approach(valid_data, network, scaler, log
         if torch.has_cudnn:
             target_values = target_values.cuda()
 
-        loss += multi_label_loss(torch.nn.functional.softmax(output), target_values).data[0]
+        loss += multi_label_loss(torch.nn.functional.softmax(output), target_values, use_weights).data[0]
         accuracy += binary_accuracy_single_multi_label_approach(output, target_values)
 
         valid_batches += 1

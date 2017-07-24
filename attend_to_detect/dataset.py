@@ -145,6 +145,29 @@ def get_data_stream_single_one_hot(batch_size, dataset_name='dcase_2017_task_4_t
     return stream, None
 
 
+def get_data_stream_non_normalized_single_one_hot(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
+                                   that_set='train', calculate_scaling_metrics=True, old_dataset=True,
+                                   examples=None):
+    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
+    if examples is None:
+        examples = dataset.num_examples
+    scheme = ShuffledScheme(examples=examples, batch_size=batch_size)
+
+    scaler = StandardScaler()
+
+    stream = DataStream(dataset=dataset, iteration_scheme=scheme)
+    stream = Mapping(stream, mapping=padder_single)
+
+    if calculate_scaling_metrics:
+        for data in stream.get_epoch_iterator():
+            for example in data[0]:
+                if old_dataset:
+                    scaler.partial_fit(example.reshape(example.shape[1:]))
+
+        return stream, scaler
+    return stream, None
+
+
 def get_input(data, scaler, old_dataset=True, volatile=False):
     if old_dataset:
         for i in range(len(data)):
@@ -152,6 +175,20 @@ def get_input(data, scaler, old_dataset=True, volatile=False):
     x = np.zeros((data.shape[0], ) + data[0].shape)
     for i, datum in enumerate(data):
         x[i, :, :] = scaler.transform(datum)
+    x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
+                 volatile=volatile, requires_grad=False)
+    if torch.has_cudnn:
+        x = x.cuda()
+    return x
+
+
+def get_input_non_normalized(data, old_dataset=True, volatile=False):
+    if old_dataset:
+        for i in range(len(data)):
+            data[i] = data[i].reshape(data[i].shape[1:])
+    x = np.zeros((data.shape[0], ) + data[0].shape)
+    for i, datum in enumerate(data):
+        x[i, :, :] = datum
     x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
                  volatile=volatile, requires_grad=False)
     if torch.has_cudnn:

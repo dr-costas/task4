@@ -15,10 +15,10 @@ import torch
 from torch.nn.utils import clip_grad_norm
 
 from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, \
-    get_output_one_hot, get_data_stream_single_one_hot
+    get_output_one_hot, get_data_stream_single_one_hot, get_input_non_normalized
 from attend_to_detect.model import CategoryBranch2
 from attend_to_detect.evaluation import validate_single_one_hot, \
-    accuracy_single_one_hot, loss_one_hot_single
+    accuracy_single_one_hot, loss_one_hot_single, tagging_metrics_one_hot
 
 __docformat__ = 'reStructuredText'
 
@@ -124,7 +124,7 @@ def main():
     if args.visdom:
         from attend_to_detect.utils.visdom_handler import VisdomHandler
         title_losses = 'Train/valid losses'
-        title_accu = 'Train/valid accuracies'
+        title_accu = 'Train/valid F1'
         if args.job_id != '':
             title_losses += ' - Job ID: {}'.format(args.job_id)
             title_accu += ' - Job ID: {}'.format(args.job_id)
@@ -141,7 +141,7 @@ def main():
             'acc',
             dict(title=title_accu,
                  xlabel='iteration',
-                 ylabel='accuracy, %'),
+                 ylabel='F1, %'),
             server=args.visdom_server, port=args.visdom_port)
         logger.handlers.append(accuracy_handler)
 
@@ -180,7 +180,10 @@ def train_loop(config, network, train_data, valid_data, scaler,
             if print_grads:
                 it_start_time = time.time()
             # Get input
-            x = get_input(batch[0], scaler)
+            if config.use_scaler:
+                x = get_input(batch[0], scaler)
+            else:
+                x = get_input_non_normalized(batch[0], scaler)
 
             # Get target values for alarm classes
             y_1_hot, y_categorical = get_output_one_hot(batch[-2], batch[-1])
@@ -196,9 +199,9 @@ def train_loop(config, network, train_data, valid_data, scaler,
             reg_loss_l2 = 0
             if any([config.l1_factor > 0.0, config.l2_factor > 0.0]):
                 for name_p, param in network.named_parameters():
-                    # if 'rnn' in name_p:
-                    reg_loss_l1 += torch.sum(config.l1_factor * torch.abs(param))
-                    reg_loss_l2 += torch.sum(config.l2_factor * torch.pow(param, 2))
+                    if 'rnn' in name_p:
+                        reg_loss_l1 += param.abs().mul(config.l1_factor).sum()
+                    reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
 
             loss += reg_loss_l1
             loss += reg_loss_l2
@@ -228,7 +231,20 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 print('-'*len(to_print[0]))
 
             losses.append(loss.data[0])
-            accuracies.append(accuracy_single_one_hot(network_output, y_categorical))
+            # accuracies.append(accuracy_single_one_hot(network_output, y_categorical))
+            if torch.has_cudnn:
+                preds = network_output[:, :, 1::2].cpu().data.numpy()
+                gds = y_1_hot[:, :, 1::2].cpu().data.numpy()
+            else:
+                preds = network_output[:, :, 1::2].data.numpy()
+                gds = y_1_hot[:, :, 1::2].data.numpy()
+
+            metrics = tagging_metrics_one_hot(
+                    preds, gds, vehicle_classes + alarm_classes
+                )
+            accuracies.append(
+                metrics['f1']
+            )
 
             if total_iterations % 10 == 0:
                 logger.log({
@@ -242,6 +258,11 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 })
 
             total_iterations += 1
+            if config.lr_iterations > 0:
+                if divmod(total_iterations, config.lr_iterations)[-1] == 0:
+                    state = optim.state_dict()
+                    state['param_groups'][0]['lr'] = state['param_groups'][0]['lr'] * config.lr_factor
+                    optim.load_state_dict(state)
 
         print('Epoch {:3d} | Elapsed train. time {:10.3f} sec(s) | Train. loss: {:10.6f}'.format(
                 epoch, time.time() - epoch_start_time,

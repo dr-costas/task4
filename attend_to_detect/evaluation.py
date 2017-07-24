@@ -3,6 +3,7 @@ import time
 import torch
 from torch.nn.functional import cross_entropy, binary_cross_entropy, sigmoid
 from sed_eval.sound_event import SegmentBasedMetrics
+from evaluation_aux import FileFormat
 
 from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output_binary, get_output_binary_single,
@@ -524,7 +525,6 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
                                                 epoch, use_weights):
     valid_batches = 0
     loss = 0.0
-    accuracy = 0.0
 
     validation_start_time = time.time()
     predictions = []
@@ -542,7 +542,7 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
         output, attention_weights = network(x[:, :, :, :64], y_1_hot.size()[1])
 
         loss += loss_one_hot_single(output, y_categorical, use_weights).data[0]
-        accuracy += accuracy_single_one_hot(output, y_categorical)
+        # accuracy += accuracy_single_one_hot(output, y_categorical)
 
         valid_batches += 1
 
@@ -570,15 +570,15 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
                 epoch, time.time() - validation_start_time,
                 loss/valid_batches))
     metrics = tagging_metrics_one_hot(
-        predictions, ground_truths, alarm_classes + vehicle_classes)
-    print(metrics)
+        predictions, ground_truths,  vehicle_classes + alarm_classes, True)
+    # print(metrics)
 
     logger.log({'iteration': total_iterations,
                 'epoch': epoch,
                 'records': {
                     'validation': dict(
                         loss=loss/valid_batches,
-                        acc=accuracy/valid_batches
+                        acc=metrics['f1']
                     )
                 }})
 
@@ -637,12 +637,13 @@ def tagging_metrics_from_raw_output(y_pred_a, y_pred_v, y_true_a, y_true_v, all_
         all_files_list = []
         rounded_data = np.round(the_data)
 
-        for file_data in rounded_data:
+        for i_f, file_data in enumerate(rounded_data):
             file_list = []
             for i, class_data in enumerate(file_data):
                 if class_data == 1:
                     file_list.append(
                         {
+                            'audio_file': 'audio_file_id'.format(i_f),
                             'event_offset': 10.00,
                             'event_onset': 00.00,
                             'event_label': the_labels[i]
@@ -691,12 +692,13 @@ def tagging_metrics_from_raw_output_single(y_pred, y_true, all_labels):
         all_files_list = []
         rounded_data = np.round(the_data)
 
-        for file_data in rounded_data:
+        for i_f, file_data in enumerate(rounded_data):
             file_list = []
             for i, class_data in enumerate(file_data):
                 if class_data == 1:
                     file_list.append(
                         {
+                            'audio_file': 'audio_file_id'.format(i_f),
                             'event_offset': 10.00,
                             'event_onset': 00.00,
                             'event_label': the_labels[i]
@@ -738,12 +740,13 @@ def tagging_metrics_from_raw_output_single_multi_label(y_pred, y_true, all_label
     def get_data(the_data, the_labels):
         all_files_list = []
 
-        for file_data in the_data:
+        for i_f, file_data in enumerate(the_data):
             file_list = []
             for i in np.argmax(file_data, axis=-1):
                 if i != 0:
                     file_list.append(
                         {
+                            'audio_file': 'audio_file_id'.format(i_f),
                             'event_offset': 10.00,
                             'event_onset': 00.00,
                             'event_label': the_labels[i-1]
@@ -764,7 +767,7 @@ def tagging_metrics_from_raw_output_single_multi_label(y_pred, y_true, all_label
     return tagging_metrics_from_list(data_pred, data_true, all_labels)
 
 
-def tagging_metrics_one_hot(y_pred, y_true, all_labels):
+def tagging_metrics_one_hot(y_pred, y_true, all_labels, print_out=False):
     """
 
     If 1-hot-encoding, the value [1, 0, 0, ..., 0] is considered <EOS>. \
@@ -785,11 +788,12 @@ def tagging_metrics_one_hot(y_pred, y_true, all_labels):
     def get_data(the_data, the_labels):
         all_files_list = []
 
-        for file_data in the_data:
+        for i_f, file_data in enumerate(the_data):
             file_list = []
             for i in np.nonzero(np.sum(file_data, axis=-2))[0]:
                 file_list.append(
                     {
+                        'audio_file': 'audio_file_id_{}'.format(i_f),
                         'event_offset': 10.00,
                         'event_onset': 00.00,
                         'event_label': the_labels[i]
@@ -807,7 +811,27 @@ def tagging_metrics_one_hot(y_pred, y_true, all_labels):
     for f_data_a in get_data(y_true, all_labels):
         data_true.append(f_data_a)
 
-    return tagging_metrics_from_list(data_pred, data_true, all_labels)
+    return task_a_evaluation(data_pred, data_true, print_out)
+    # return tagging_metrics_from_list(data_pred, data_true, all_labels)
+
+
+def task_a_evaluation(data_pred, data_true, print_out=False):
+    """
+
+    :param data_pred: Predicted data
+    :type data_pred: list[list[dict[str, float|str]]]
+    :param data_true: Ground truth data
+    :type data_true: list[list[dict[str, float|str]]]
+    :param print_out: Verbosity
+    :type print_out: bool
+    :return: Dict with `recall`, `precision`, and `f1`
+    :rtype: dict[str, float]
+    """
+    ground_truth = FileFormat(data_true)
+    prediction = FileFormat(data_pred)
+    if print_out:
+        print(ground_truth.compute_metrics_string(prediction))
+    return ground_truth.compute_metrics(prediction)
 
 
 def main():

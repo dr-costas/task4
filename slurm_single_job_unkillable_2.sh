@@ -15,7 +15,7 @@
 
 export PYTHONPATH=$PYTHONPATH:.
 srun python scripts/train_one_hot_single.py \
-    attend_to_detect.configs.config_single \
+    attend_to_detect.configs.config_single_mel_only \
     checkpoints/$SLURM_JOB_ID \
     --visdom --visdom-port 5001 --visdom-server http://eos11 \
     --no-tqdm \

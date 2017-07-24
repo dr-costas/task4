@@ -236,10 +236,13 @@ def multi_label_loss(y_pred, y_true, use_weights):
 
 def loss_one_hot_single(y_pred, y_true, use_weights):
     if use_weights:
-        local_weights = [1000000.0 / a for a in all_freqs_vehicles_first]
-        weights = torch.ones(y_pred.size()[-1]).float()/0.5
-        local_weights = torch.from_numpy(np.array(local_weights))
-        weights[1::2] = local_weights
+        local_weights_positive = [50000.0 / a for a in all_freqs_vehicles_first]
+        local_weights_negative = [50000.0 / (50000.0 - a) for a in all_freqs_vehicles_first]
+        weights = torch.ones(y_pred.size()[-1]).float()
+        local_weights_positive = torch.from_numpy(np.array(local_weights_positive))
+        local_weights_negative = torch.from_numpy(np.array(local_weights_negative))
+        weights[1::2] = local_weights_positive
+        weights[0::2] = local_weights_negative
         if torch.has_cudnn:
             weights = weights.cuda()
     else:

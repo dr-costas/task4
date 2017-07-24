@@ -153,7 +153,7 @@ def get_input(data, scaler, old_dataset=True, volatile=False):
     for i, datum in enumerate(data):
         x[i, :, :] = scaler.transform(datum)
     x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
-                 volatile=volatile)
+                 volatile=volatile, requires_grad=False)
     if torch.has_cudnn:
         x = x.cuda()
     return x

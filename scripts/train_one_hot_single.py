@@ -191,9 +191,19 @@ def train_loop(config, network, train_data, valid_data, scaler,
             # Go through the alarm branch
             # network_output, attention_weights = network(x, y_1_hot.size()[1])
             network_output, attention_weights = network(x[:, :, :, :64], y_1_hot.size()[1])
+            # print(attention_weights[0][0])
 
             # Calculate losses, do backward passing, and do updates
             loss = loss_one_hot_single(network_output, y_categorical, config.network_loss_weight)
+
+            # w = network.get_att_weights()
+            #
+            # loss += w[:, :2].pow(2).mul(0.1).sum()
+            # loss += w[:, :2].abs().mul(1e-3).sum()
+
+            # for e in attention_weights:
+            #     for ee in e:
+            #         loss += ee.abs().mul(1e-3).sum()
 
             reg_loss_l1 = 0
             reg_loss_l2 = 0

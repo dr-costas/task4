@@ -21,40 +21,37 @@ from attend_to_detect.dataset import (
     get_output_binary_single)
 from attend_to_detect.pytorch_dataset import ChallengeDataset
 from attend_to_detect.model import CategoryBranch2
-from attend_to_detect.evaluation import category_cost
+from attend_to_detect.evaluation import category_cost, tagging_metrics_from_list
 
 __docformat__ = 'reStructuredText'
 
-def validate(valid_data, network, scaler, logger, total_iterations, epoch):
+def validate(valid_data, network, logger, total_iterations, epoch):
     valid_batches = 0
     loss = 0.0
     accuracy = 0.0
 
-    validation_start_time = time.time()
+    validation_start_time = timeit.timeit()
     predictions = []
     ground_truths = []
-    # loss_fn = torch.nn.MSELoss()
     for batch in valid_data.get_epoch_iterator():
         x, y = batch
-        # Go through the alarm branch
+        x = torch.autograd.Variable(x.cuda())
+        y = torch.autograd.Variable(y.cuda(), requires_grad=False)
+
         output, attention_weights = network(x, y.size(1))
 
         loss += category_cost(output, y).data[0]
-        #accuracy += binary_accuracy_single(output, y_1_hot, is_valid=True)
-
         valid_batches += 1
 
         if torch.has_cudnn:
             output = output.cpu()
-            y_1_hot = y_1_hot.cpu()
 
-        predictions.extend(sigmoid(output).data.numpy())
-        ground_truths.extend(y_1_hot.data.numpy())
-
+        predictions.extend(predictions_to_list(output))
+        ground_truths.extend(predictions_to_list(y, targets=True))
     print('Epoch {:4d} validation elapsed time {:10.5f} sec(s) | Valid. loss alarm: {:10.6f}'.format(
-                epoch, time.time() - validation_start_time,
+                epoch, timeit.timeit() - validation_start_time,
                 loss/valid_batches))
-    metrics = tagging_metrics_from_raw_output_single(
+    metrics = tagging_metrics_from_list(
         predictions, ground_truths, alarm_classes + vehicle_classes)
     print(metrics)
 
@@ -63,12 +60,31 @@ def validate(valid_data, network, scaler, logger, total_iterations, epoch):
                 'records': {
                     'validation': dict(
                         loss=loss/valid_batches,
-                        acc=accuracy/valid_batches
                     )
                 }})
 
 
-
+def predictions_to_list(pred, targets=False):
+    batch_size = pred.size(0)
+    n_timesteps = pred.size(1)
+    if targets:
+        classes = pred - 1
+    else:
+        pred_flat = torch.nn.functional.softmax(pred.view(-1, pred.size(2)))
+        classes_flat = torch.max(pred_flat, -1)[1]
+        classes = classes_flat.view(batch_size, n_timesteps, -1) - 1
+    pred_list = []
+    all_classes = alarm_classes + vehicle_classes
+    for sample in classes:
+        y = []
+        for n in range(n_timesteps):
+            if sample[n].data[0] >= 0:
+                event = dict(event_offset=10.00,
+                        event_onset=00.00,
+                        event_label=all_classes[sample[n].data[0]])
+                y.append(event)
+        pred_list.append(y)
+    return pred_list
 
 def main():
     # Getting configuration file from the command line argument
@@ -146,9 +162,9 @@ def main():
     with open('weights.pkl', 'rb') as f:
         weights = pickle.load(f)
 
-    train_dataset = ChallengeDataset(dataset_name='attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5',
+    train_dataset = ChallengeDataset(dataset_name='/Tmp/santosjf/dcase_2017_task_4_test.hdf5',
             that_set='train', scaler=scaler, shuffle_targets=True)
-    valid_dataset = ChallengeDataset(dataset_name='attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5',
+    valid_dataset = ChallengeDataset(dataset_name='/Tmp/santosjf/dcase_2017_task_4_test.hdf5',
             that_set='test', scaler=scaler, shuffle_targets=False)
 
     train_sampler = WeightedRandomSampler(weights, len(train_dataset))
@@ -228,6 +244,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             # Calculate losses, do backward passing, and do updates
             loss = category_cost(network_output, y)
+            #pred_list = predictions_to_list(y, targets=True)
 
             optim.zero_grad()
             loss.backward()
@@ -267,7 +284,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
         # Validation
         network.eval()
-        validate_single_branch(valid_data, network, scaler, logger, total_iterations, epoch)
+        validate(valid_data, network, logger, total_iterations, epoch)
 
         # Checkpoint
         ckpt = {'network': network.state_dict(),

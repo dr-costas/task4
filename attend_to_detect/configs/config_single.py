@@ -57,4 +57,6 @@ network_dropout_rnn_recurrent = 0.25
 
 network_rnn_subsamplings = [1]
 
+use_scaler = True
+
 # EOF

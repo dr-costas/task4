@@ -1,7 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# imports
 import numpy as np
 import time
 
@@ -10,25 +6,25 @@ __docformat__ = 'reStructuredText'
 
 
 def max_sub_array(the_array):
-    """
+    """Kadane's algorithm
 
-    :param the_array:
+    :param the_array: 3d array of scores (batch_size, n_steps, n_classes)
     :type the_array: numpy.core.multiarray.ndarray
     :return:
     :rtype:
     """
+    batch_size, n_steps, n_classes = the_array.shape
     max_ending_here = the_array[:, 0, :].copy()
     max_so_far = the_array[:, 0, :].copy()
 
-    max_end_index = np.zeros((the_array.shape[0], the_array.shape[2]))
-    max_start_index = np.zeros((the_array.shape[0], the_array.shape[2]))
-    max_start_index_potential = np.zeros((the_array.shape[0], the_array.shape[2]))
+    max_end_index = np.zeros((batch_size, n_classes))
+    max_start_index = np.zeros((batch_size, n_classes))
+    max_start_index_potential = np.zeros((batch_size, n_classes))
 
-    for i in range(1, the_array.shape[1]):
+    for i in range(1, n_steps):
         x = the_array[:, i, :]
 
         max_ending_here = np.maximum(x, max_ending_here + x)
-
         max_start_index_potential[max_ending_here == x] = i
 
         max_so_far = np.maximum(max_so_far, max_ending_here)
@@ -100,5 +96,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# EOF

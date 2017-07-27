@@ -32,6 +32,9 @@ vehicle_classes = [
     'Train'
 ]
 
+all_classes_vehicle_first = vehicle_classes + alarm_classes
+all_classes_alarm_first = alarm_classes + vehicle_classes
+
 
 def padder(data):
     data = list(data)
@@ -119,6 +122,52 @@ def get_data_stream_single(batch_size, dataset_name='dcase_2017_task_4_test.hdf5
     return stream, None
 
 
+def get_data_stream_single_one_hot(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
+                                   that_set='train', calculate_scaling_metrics=True, old_dataset=True,
+                                   examples=None):
+    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
+    if examples is None:
+        examples = dataset.num_examples
+    scheme = ShuffledScheme(examples=examples, batch_size=batch_size)
+
+    scaler = StandardScaler()
+
+    stream = DataStream(dataset=dataset, iteration_scheme=scheme)
+    stream = Mapping(stream, mapping=padder_single)
+
+    if calculate_scaling_metrics:
+        for data in stream.get_epoch_iterator():
+            for example in data[0]:
+                if old_dataset:
+                    scaler.partial_fit(example.reshape(example.shape[1:]))
+
+        return stream, scaler
+    return stream, None
+
+
+def get_data_stream_non_normalized_single_one_hot(batch_size, dataset_name='dcase_2017_task_4_test.hdf5',
+                                   that_set='train', calculate_scaling_metrics=True, old_dataset=True,
+                                   examples=None):
+    dataset = H5PYDataset(dataset_name, which_sets=(that_set, ), load_in_memory=False)
+    if examples is None:
+        examples = dataset.num_examples
+    scheme = ShuffledScheme(examples=examples, batch_size=batch_size)
+
+    scaler = StandardScaler()
+
+    stream = DataStream(dataset=dataset, iteration_scheme=scheme)
+    stream = Mapping(stream, mapping=padder_single)
+
+    if calculate_scaling_metrics:
+        for data in stream.get_epoch_iterator():
+            for example in data[0]:
+                if old_dataset:
+                    scaler.partial_fit(example.reshape(example.shape[1:]))
+
+        return stream, scaler
+    return stream, None
+
+
 def get_input(data, scaler, old_dataset=True, volatile=False):
     if old_dataset:
         for i in range(len(data)):
@@ -127,7 +176,21 @@ def get_input(data, scaler, old_dataset=True, volatile=False):
     for i, datum in enumerate(data):
         x[i, :, :] = scaler.transform(datum)
     x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
-                 volatile=volatile)
+                 volatile=volatile, requires_grad=False)
+    if torch.has_cudnn:
+        x = x.cuda()
+    return x
+
+
+def get_input_non_normalized(data, old_dataset=True, volatile=False):
+    if old_dataset:
+        for i in range(len(data)):
+            data[i] = data[i].reshape(data[i].shape[1:])
+    x = np.zeros((data.shape[0], ) + data[0].shape)
+    for i, datum in enumerate(data):
+        x[i, :, :] = datum
+    x = Variable(torch.from_numpy(x.reshape((x.shape[0], 1, ) + x.shape[1:])).float(),
+                 volatile=volatile, requires_grad=False)
     if torch.has_cudnn:
         x = x.cuda()
     return x
@@ -233,5 +296,53 @@ def get_output_binary_one_hot(data_a, data_v):
         non_zeros = [n[0][0] for n in non_zeros]
         y_categorical[i, :] = non_zeros
         y_one_hot[i, :, :] = datum
+
+    return y_one_hot, y_categorical
+
+
+def get_output_one_hot(data_a, data_v):
+    max_i = 0
+    for i in range(len(data_a)):
+        data_a[i] = data_a[i].reshape(data_a[i].shape[1:])
+        data_v[i] = data_v[i].reshape(data_v[i].shape[1:])
+        current_i = data_a[i].shape[0] + data_v[i].shape[0]
+        if max_i <= current_i:
+            max_i = current_i
+
+    b_size = data_a.shape[0]
+
+    y_one_hot = Variable(
+        torch.zeros(
+            (b_size, len(all_classes_vehicle_first), 2 * len(all_classes_vehicle_first))
+        ).float(),
+        requires_grad=False
+    )
+    y_categorical = Variable(
+        torch.zeros(
+            (b_size, len(all_classes_vehicle_first))
+        ).float(),
+        requires_grad=False
+    )
+
+    for i in range(len(data_v)):
+        active_vehicles = np.nonzero(data_v[i])[1]
+        active_vehicles = (active_vehicles[np.nonzero(active_vehicles)] - 1) * 2 + 1
+
+        active_alarms = np.nonzero(data_a[i])[1]
+        active_alarms = (active_alarms[np.nonzero(active_alarms)] - 1 + len(vehicle_classes)) * 2 + 1
+        active_indices = active_vehicles.tolist() + active_alarms.tolist()
+
+        for i2 in range(len(all_classes_vehicle_first)):
+            to_search = i2 * 2 + 1
+            if to_search in active_indices:
+                y_one_hot[i, i2, to_search] = 1
+                y_categorical[i, i2] = to_search
+            else:
+                y_one_hot[i, i2, to_search - 1] = 1
+                y_categorical[i, i2] = to_search - 1
+
+        if torch.has_cudnn:
+            y_one_hot = y_one_hot.cuda()
+            y_categorical = y_categorical.cuda()
 
     return y_one_hot, y_categorical

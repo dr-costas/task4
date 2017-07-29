@@ -18,14 +18,14 @@ dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_datas
 grad_clip_norm = 0.
 network_loss_weight = True
 lr_iterations = 900
-lr_factor = .1
+lr_factor = .95
 
 # Optimizer parameters
 optimizer = Adam
 # optimizer = Adam
 optimizer_lr = 1e-3
 l1_factor = 0.
-l2_factor = 0.01
+l2_factor = 0.001
 
 network_channels_out = [64, 64, 64, 64]
 network_cnn_kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]
@@ -56,20 +56,20 @@ rnn_time_steps_out = 13
 
 network_init = xavier_uniform
 
-network_dropout_cnn = 0.
+network_dropout_cnn = 0.25
 network_dropout_rnn_input = 0.5
-network_dropout_rnn_recurrent = 0.
+network_dropout_rnn_recurrent = 0.25
 
 network_rnn_subsamplings = [1]
 
 mlp_dims = [len(all_freqs_vehicles_first)]
 mlp_activations = [functional.tanh]
-mlp_dropouts = [0.]
+mlp_dropouts = [0.25]
 
 last_rnn_dim = len(all_freqs_vehicles_first)
 last_rnn_activation = functional.tanh
 last_rnn_dropout_i = 0.5
-last_rnn_dropout_h = 0.
+last_rnn_dropout_h = 0.25
 
 use_scaler = True
 

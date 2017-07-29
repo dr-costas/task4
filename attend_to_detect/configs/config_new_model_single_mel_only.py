@@ -21,11 +21,11 @@ lr_iterations = 900
 lr_factor = .1
 
 # Optimizer parameters
-optimizer = Adadelta
+optimizer = Adam
 # optimizer = Adam
 optimizer_lr = 1e-6
 l1_factor = 0.
-l2_factor = 0.001
+l2_factor = 0.
 
 network_channels_out = [128, 128, 128, 128]
 network_cnn_kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]

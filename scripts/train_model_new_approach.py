@@ -246,7 +246,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             optim.zero_grad()
             loss.backward()
 
-            if config.grad_clip_norm > 0:
+            if config.grad_clip_norm > 0.:
                 clip_grad_norm(network.parameters(), config.grad_clip_norm)
 
             optim.step()

@@ -23,8 +23,8 @@ lr_factor = .1
 # Optimizer parameters
 optimizer = Adam
 # optimizer = Adam
-optimizer_lr = 1e-6
-l1_factor = 0.
+optimizer_lr = 1e-3
+l1_factor = 0.0001
 l2_factor = 0.01
 
 network_channels_out = [128, 128, 128, 128]
@@ -54,7 +54,7 @@ network_rnn_activations = [functional.tanh]
 
 rnn_time_steps_out = 13
 
-network_init = xavier_normal
+network_init = xavier_uniform
 
 network_dropout_cnn = 0.
 network_dropout_rnn_input = 0.5

@@ -236,9 +236,9 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             if any([config.l1_factor > 0.0, config.l2_factor > 0.0]):
                 for name_p, param in network.named_parameters():
-                    if 'rnn' in name_p or 'mlp' in name_p:
+                    if 'rnn' in name_p or 'mlp' in name_p or 'cnn' in name_p:
                         reg_loss_l1 += param.abs().mul(config.l1_factor).sum()
-                        reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
+                    reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
 
             loss += reg_loss_l1
             loss += reg_loss_l2

@@ -60,6 +60,7 @@ def find_max_mean(batch_array, target_classes, s):
     max_means = np.zeros((b_size, num_classes))
     max_means_index_start = np.zeros((b_size, num_classes))
     max_means_index_end = np.zeros((b_size, num_classes))
+    s_i_indices = np.zeros((b_size, num_classes))
 
     for b_index in range(b_size):
 
@@ -72,11 +73,13 @@ def find_max_mean(batch_array, target_classes, s):
                 max_means[b_index, class_index] = class_array.mean()
                 max_means_index_start[b_index, class_index] = 0
                 max_means_index_end[b_index, class_index] = 0
+                s_i_indices[b_index, class_index] = -1
 
             else:
                 tmp_max_means = np.zeros(len(s))
                 tmp_max_means_start = np.zeros(len(s))
                 tmp_max_means_end = np.zeros(len(s))
+                s_i_indices_tmp = np.zeros(len(s))
 
                 for s_i in range(len(s)):
                     local_array = class_array * s[s_i, :]
@@ -90,13 +93,15 @@ def find_max_mean(batch_array, target_classes, s):
                     else:
                         tmp_max_means_start[s_i] = indices[0]
                         tmp_max_means_end[s_i] = indices[-1]
+                    s_i_indices_tmp[s_i] = s_i
 
                 max_index = np.argmax(tmp_max_means)
                 max_means[b_index, class_index] = tmp_max_means[max_index]
                 max_means_index_start[b_index, class_index] = tmp_max_means_start[max_index]
                 max_means_index_end[b_index, class_index] = tmp_max_means_end[max_index]
+                s_i_indices[b_index, class_index] = s_i_indices_tmp[max_index]
 
-    return max_means, max_means_index_end, max_means_index_end
+    return max_means, s_i_indices, max_means_index_end, max_means_index_end
 
 
 def find_max_mean_2(batch_array, target_classes, s):

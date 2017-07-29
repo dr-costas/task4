@@ -98,7 +98,7 @@ class ChallengeDataset(Dataset):
 
 if __name__ == '__main__':
     import pickle
-    with open('scaler.pkl', 'rb') as f:
+    with open('scaler_2.pkl', 'rb') as f:
         scaler = pickle.load(f)
 
     dataset = ChallengeDataset(dataset_name='attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5',

@@ -285,6 +285,10 @@ class CategoryBranch2(nn.Module):
         h_s = Variable(torch.zeros(o_size[0], o_size[1], self.last_rnn_dim))
         zeros = Variable(torch.zeros(o_size[0], self.last_rnn_dim))
 
+        if torch.has_cudnn:
+            h_s = h_s.cuda()
+            zeros = zeros.cuda()
+
         h_s[:, 0, :] = self.last_rnn_activation(self.last_rnn_layer(
             self.last_rnn_dropout_i(output[:, 0, :]),
             zeros
@@ -339,7 +343,7 @@ def main():
         last_rnn_dim=17,
         last_rnn_activation=nn.functional.tanh,
         last_rnn_dropout_i=0.5,
-        last_rnn_dropout_h=0.2
+        last_rnn_dropout_h=0.2,
     )
 
     rnn_out, mlp_out = b(x)

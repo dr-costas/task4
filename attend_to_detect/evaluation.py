@@ -3,11 +3,13 @@ import time
 import torch
 from torch.nn.functional import cross_entropy, binary_cross_entropy, sigmoid
 from sed_eval.sound_event import SegmentBasedMetrics
-from evaluation_aux import FileFormat
+from attend_to_detect.evaluation_aux import FileFormat
 
 from attend_to_detect.dataset import (
     vehicle_classes, alarm_classes, get_input, get_output_binary, get_output_binary_single,
-    get_output_binary_one_hot, get_output_one_hot)
+    get_output_binary_one_hot, get_output_one_hot, get_output_new_model)
+
+from attend_to_detect.utils.msa_utils import *
 
 
 MAX_VALIDATION_LEN = 5
@@ -253,6 +255,37 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
         y_true.view(y_true.size()[0] * y_true.size()[1]).long(),
         weight=weights
     )
+
+
+def loss_new_model(y_pred, y_true, use_weights):
+    if use_weights:
+        local_weights_positive = [50000.0 / a for a in all_freqs_vehicles_first]
+        weights = torch.from_numpy(np.array(local_weights_positive)).float()
+    else:
+        weights = None
+    if torch.has_cudnn and weights is not None:
+        weights = weights.cuda()
+
+    loss = torch.nn.functional.cross_entropy(
+        y_pred,
+        y_true[:, 0],
+        weight=weights
+    )
+
+    for i in range(1, y_true.size()[1]):
+        for ii in range(len(y_true[:, i])):
+            c = torch.ne(y_true[ii, i], -1)
+            if torch.has_cudnn:
+                c = c.cpu()
+            c = c.data[0]
+            if c:
+                loss += torch.nn.functional.cross_entropy(
+                    y_pred[ii:ii+1, :],
+                    y_true[ii:ii+1, i],
+                    weight=weights
+                )
+
+    return loss
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -583,6 +616,88 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
                 }})
 
 
+def validate_single_new_model(valid_data, network, scaler, logger, total_iterations,
+                              epoch, use_weights, s):
+    valid_batches = 0
+    loss = 0.0
+
+    validation_start_time = time.time()
+    predictions = []
+    ground_truths = []
+    # loss_fn = torch.nn.MSELoss()
+    for batch in valid_data.get_epoch_iterator():
+        # Get input
+        x = get_input(batch[0], scaler, volatile=True)
+
+        # Get target values for alarm classes
+        y_1_hot, y_categorical = get_output_new_model(batch[-2], batch[-1])
+
+        # Go through the alarm branch
+        output, mlp_output = network(x[:, :, :, :64])
+
+        if torch.has_cudnn:
+            tmp_v = output.cpu().data.numpy()
+            tmp_classes = y_categorical.cpu().data.numpy()
+        else:
+            tmp_v = output.data.numpy()
+            tmp_classes = y_categorical.data.numpy()
+
+        max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(tmp_v, tmp_classes, s)
+
+        mult_result = torch.autograd.Variable(torch.zeros(output.size()))
+
+        if torch.has_cudnn:
+            mult_result = mult_result.cuda()
+
+        for b_i in range(s_i_inds.shape[0]):
+            for c_i in range(s_i_inds.shape[1]):
+                if s_i_inds[b_i, c_i] == -1:
+                    mult_result[b_i, :, c_i] = -1 * output[b_i, :, c_i]
+                else:
+                    s_tmp = torch.autograd.Variable(torch.from_numpy(
+                        s[int(s_i_inds[b_i, c_i]), :]
+                    ).float())
+                    if torch.has_cudnn:
+                        s_tmp = s_tmp.cuda()
+                    mult_result[b_i, :, c_i] = output[b_i, :, c_i] * s_tmp
+
+        final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
+
+        # Calculate losses, do backward passing, and do updates
+        loss_tmp = loss_new_model(final_output, y_categorical, use_weights)
+
+        if torch.has_cudnn:
+            loss_tmp = loss_tmp.cpu()
+
+        loss += loss_tmp.data[0]
+
+        valid_batches += 1
+
+        if torch.has_cudnn:
+            final_output = final_output.cpu()
+            y_categorical = y_categorical.cpu()
+
+        y_categorical = y_categorical.data.numpy()
+        final_output = final_output.data.numpy()
+        predictions.extend(final_output)
+        ground_truths.extend(y_categorical)
+
+    print('Epoch {:3d} | Elapsed valid. time {:10.3f} sec(s) | Valid. loss: {:10.6f}'.format(
+                epoch, time.time() - validation_start_time,
+                loss/valid_batches))
+    metrics = tagging_metrics_categorical(
+        predictions, ground_truths,  vehicle_classes + alarm_classes, True)
+
+    logger.log({'iteration': total_iterations,
+                'epoch': epoch,
+                'records': {
+                    'validation': dict(
+                        loss=loss/valid_batches,
+                        acc=metrics['f1']
+                    )
+                }})
+
+
 def tagging_metrics_from_list(y_pred_dict, y_true_dict, all_labels):
     """
 
@@ -809,6 +924,74 @@ def tagging_metrics_one_hot(y_pred, y_true, all_labels, print_out=False):
 
     data_true = []
     for f_data_a in get_data(y_true, all_labels):
+        data_true.append(f_data_a)
+
+    return task_a_evaluation(data_pred, data_true, print_out)
+    # return tagging_metrics_from_list(data_pred, data_true, all_labels)
+
+
+def tagging_metrics_categorical(y_pred, y_true, all_labels, print_out=False):
+    """
+
+    If 1-hot-encoding, the value [1, 0, 0, ..., 0] is considered <EOS>. \
+    If not 1-hot-encoded, the value 0 is considered <EOS>.
+
+    :param y_pred: List with predictions, of len = nb_files and each element \
+                   is a matrix of size [nb_events_detected x nb_labels]
+    :type y_pred: numpy.core.multiarray.ndarray
+    :param y_true: List with true values, of len = nb_files. If 1-hot-enconding \
+                   each element is a matrix of size [nb_events x nb_labels] . \
+                   Else, each element is an array of len = nb_events.
+    :type y_true: numpy.core.multiarray.ndarray
+    :param all_labels: A list with all the labels **including** the <EOS> at the 0th index
+    :type all_labels: list[str]
+    :return:
+    :rtype:
+    """
+    def get_data_pred(the_data, the_labels):
+        all_files_list = []
+
+        for i_f, file_data in enumerate(the_data):
+            file_list = []
+            for i_d, i in enumerate(file_data):
+                if i > 0.5:
+                    file_list.append(
+                        {
+                            'audio_file': 'audio_file_id_{}'.format(i_f),
+                            'event_offset': 10.00,
+                            'event_onset': 00.00,
+                            'event_label': the_labels[i_d]
+                        }
+                    )
+            all_files_list.append(file_list)
+
+        return all_files_list
+
+    def get_data_true(the_data, the_labels):
+        all_files_list = []
+
+        for i_f, file_data in enumerate(the_data):
+            file_list = []
+            for i_d, i in enumerate(file_data):
+                if i > -1:
+                    file_list.append(
+                        {
+                            'audio_file': 'audio_file_id_{}'.format(i_f),
+                            'event_offset': 10.00,
+                            'event_onset': 00.00,
+                            'event_label': the_labels[i]
+                        }
+                    )
+            all_files_list.append(file_list)
+
+        return all_files_list
+
+    data_pred = []
+    for f_data_a in get_data_pred(y_pred, all_labels):
+        data_pred.append(f_data_a)
+
+    data_true = []
+    for f_data_a in get_data_true(y_true, all_labels):
         data_true.append(f_data_a)
 
     return task_a_evaluation(data_pred, data_true, print_out)

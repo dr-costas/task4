@@ -297,6 +297,49 @@ def get_output_binary_one_hot(data_a, data_v):
         y_categorical[i, :] = non_zeros
         y_one_hot[i, :, :] = datum
 
+    y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
+    y_categorical = Variable(torch.from_numpy(y_categorical).float(), requires_grad=False)
+
+    return y_one_hot, y_categorical
+
+
+def get_output_new_model(data_a, data_v):
+    # data_a = data_v.copy()
+    max_i = 0
+    for i in range(len(data_a)):
+        data_a[i] = data_a[i].reshape(data_a[i].shape[1:])
+        data_v[i] = data_v[i].reshape(data_v[i].shape[1:])
+        current_i = data_a[i].shape[0] + data_v[i].shape[0] - 2
+        if max_i <= current_i:
+            max_i = current_i
+
+    total_classes = len(alarm_classes) + len(vehicle_classes)
+
+    y_one_hot = np.zeros((data_v.shape[0], max_i, total_classes))
+    y_categorical = (np.zeros((data_a.shape[0], max_i))) - 1
+
+    for i in range(len(data_a)):
+        datum = np.zeros((max_i, total_classes))
+        l_l = 0
+        u_l = l_l + data_v[i].shape[0] - 1
+        datum[l_l:u_l, :len(vehicle_classes)] = data_v[i][:-1, 1:]
+        l_l += u_l
+        u_l = l_l + data_a[i].shape[0] - 1
+        datum[l_l:u_l, -len(alarm_classes):] = data_a[i][:-1, 1:]
+        y_one_hot[i, :, :] = datum
+
+        for t in range(datum.shape[0]):
+            v = np.argwhere(datum[t] == 1)
+            if len(v) > 0:
+                y_categorical[i, t] = v[0][0]
+
+    y_one_hot = Variable(torch.from_numpy(y_one_hot).float(), requires_grad=False)
+    y_categorical = Variable(torch.from_numpy(y_categorical).long(), requires_grad=False)
+
+    if torch.has_cudnn:
+        y_one_hot = y_one_hot.cuda()
+        y_categorical = y_categorical.cuda()
+
     return y_one_hot, y_categorical
 
 

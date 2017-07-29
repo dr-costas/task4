@@ -120,8 +120,8 @@ def main():
     else:
         examples = args.train_examples
 
-    if os.path.isfile('scaler.pkl'):
-        with open('scaler.pkl', 'rb') as f:
+    if os.path.isfile('scaler_2.pkl'):
+        with open('scaler_2.pkl', 'rb') as f:
             scaler = pickle.load(f)
         train_data, _ = get_data_stream(
             dataset_name=config.dataset_full_path,
@@ -135,7 +135,7 @@ def main():
             calculate_scaling_metrics=True,
             examples=examples)
         # Serialize scaler so we don't need to do this again
-        with open('scaler.pkl', 'wb') as f:
+        with open('scaler_2.pkl', 'wb') as f:
             pickle.dump(scaler, f)
 
     # Get the validation data stream

@@ -263,6 +263,7 @@ def loss_new_model(y_pred, y_true, use_weights):
         weights = torch.from_numpy(np.array(local_weights_positive)).float()
     else:
         weights = None
+
     if torch.has_cudnn and weights is not None:
         weights = weights.cuda()
 

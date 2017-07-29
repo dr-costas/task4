@@ -21,9 +21,9 @@ lr_iterations = 900
 lr_factor = .1
 
 # Optimizer parameters
-optimizer = Adam
+optimizer = Adadelta
 # optimizer = Adam
-optimizer_lr = 1e-4
+optimizer_lr = 1e-5
 l1_factor = 0.
 l2_factor = 0.
 

@@ -976,7 +976,7 @@ def tagging_metrics_categorical(y_pred, y_true, all_labels, print_out=False):
             print(' -- ')
             embed()
             exit()
-            for i_d, i in enumerate(file_data):
+            for i in file_data:
                 if i > -1:
                     file_list.append(
                         {

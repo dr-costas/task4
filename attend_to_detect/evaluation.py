@@ -619,7 +619,7 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
 
 
 def validate_single_new_model(valid_data, network, scaler, logger, total_iterations,
-                              epoch, use_weights, s):
+                              epoch, use_weights, s, b_size):
     valid_batches = 0
     loss = 0.0
 
@@ -666,7 +666,7 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
         final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
 
         # Calculate losses, do backward passing, and do updates
-        loss_tmp = loss_new_model(final_output, y_categorical, use_weights)
+        loss_tmp = loss_new_model(final_output, y_categorical, use_weights)/b_size
 
         if torch.has_cudnn:
             loss_tmp = loss_tmp.cpu()

@@ -11,19 +11,20 @@ all_freqs_alarms_first = class_freqs_alarm + class_freqs_vehicle
 all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 
 # General variables
-batch_size = 32
+batch_size = 64
 epochs = 300
+lr_iterations = 900
+
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 
-grad_clip_norm = 0.
+use_scaler = True
 network_loss_weight = True
-lr_iterations = 900
-lr_factor = .95
 
 # Optimizer parameters
 optimizer = Adam
-# optimizer = Adam
+grad_clip_norm = 0.
 optimizer_lr = 1e-3
+lr_factor = .95
 l1_factor = 0.
 l2_factor = 0.001
 
@@ -70,7 +71,5 @@ last_rnn_dim = len(all_freqs_vehicles_first)
 last_rnn_activation = functional.tanh
 last_rnn_dropout_i = 0.5
 last_rnn_dropout_h = 0.25
-
-use_scaler = True
 
 # EOF

@@ -307,7 +307,9 @@ def train_loop(config, network, train_data, valid_data, scaler,
         # Validation
         network.eval()
         validate_single_new_model(
-            valid_data, network, scaler, logger, total_iterations, epoch, config.network_loss_weight, s)
+            valid_data, network, scaler, logger, total_iterations, epoch, config.network_loss_weight, s,
+            config.batch_size
+        )
 
         # Checkpoint
         ckpt = {'network': network.state_dict(),

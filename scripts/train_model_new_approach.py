@@ -229,7 +229,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
 
             # Calculate losses, do backward passing, and do updates
-            loss = loss_new_model(final_output, y_categorical, config.network_loss_weight)
+            loss = loss_new_model(final_output, y_categorical, config.network_loss_weight)/config.batch_size
 
             reg_loss_l1 = 0
             reg_loss_l2 = 0
@@ -254,8 +254,8 @@ def train_loop(config, network, train_data, valid_data, scaler,
             if print_grads:
                 e_time = time.time() - it_start_time
                 to_print = []
-                for param, name, module in iterate_params(network):
-                    m_name = str(module)
+                for param, name, the_module_p in iterate_params(network):
+                    m_name = str(the_module_p)
                     if len(m_name) > 40:
                         m_name = m_name[:37] + '...'
                     tmp_s = "{:9s} - {:-<40s}: Grad norm {:.5E} | Weight norm {:5E}".format(

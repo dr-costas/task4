@@ -259,7 +259,7 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
 
 def loss_new_model(y_pred, y_true, use_weights):
     if use_weights:
-        local_weights_positive = [50000.0 / a for a in all_freqs_vehicles_first]
+        local_weights_positive = [27218. / a for a in all_freqs_vehicles_first]
         weights = torch.from_numpy(np.array(local_weights_positive)).float()
     else:
         weights = None

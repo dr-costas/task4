@@ -289,16 +289,16 @@ class CategoryBranch2(nn.Module):
             h_s = h_s.cuda()
             zeros = zeros.cuda()
 
-        h_s[:, 0, :] = self.last_rnn_activation(self.last_rnn_layer(
+        h_s[:, 0, :] = nn.functional.sigmoid(self.last_rnn_activation(self.last_rnn_layer(
             self.last_rnn_dropout_i(output[:, 0, :]),
             zeros
-        ))
+        )))
 
         for s_i in range(1, o_size[1]):
-            h_s[:, s_i, :] = self.last_rnn_activation(self.last_rnn_layer(
+            h_s[:, s_i, :] = nn.functional.sigmoid(self.last_rnn_activation(self.last_rnn_layer(
                 self.last_rnn_dropout_i(output[:, s_i, :]),
                 self.last_rnn_dropout_h(h_s[:, s_i - 1, :])
-            ))
+            )))
 
         return h_s, mlp_output
 

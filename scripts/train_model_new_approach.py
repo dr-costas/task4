@@ -182,127 +182,127 @@ def train_loop(config, network, train_data, valid_data, scaler,
         accuracies = []
         epoch_start_time = time.time()
         epoch_iterator = enumerate(train_data.get_epoch_iterator())
-        # if not no_tqdm:
-        #     epoch_iterator = tqdm(epoch_iterator,
-        #                           total=50000 // config.batch_size)
-        # for iteration, batch in epoch_iterator:
-        #     if print_grads:
-        #         it_start_time = time.time()
-        #     # Get input
-        #     if config.use_scaler:
-        #         x = get_input(batch[0], scaler)
-        #     else:
-        #         x = get_input_non_normalized(batch[0], scaler)
-        #
-        #     # Get target values
-        #     y_1_hot, y_categorical = get_output_new_model(batch[-2], batch[-1])
-        #
-        #     # network_output, attention_weights = network(x, y_1_hot.size()[1])
-        #     network_output, mlp_output = network(x[:, :, :, :64])
-        #
-        #     if torch.has_cudnn:
-        #         tmp_v = network_output.cpu().data.numpy()
-        #         tmp_classes = y_categorical.cpu().data.numpy()
-        #     else:
-        #         tmp_v = network_output.data.numpy()
-        #         tmp_classes = y_categorical.data.numpy()
-        #
-        #     max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(tmp_v, tmp_classes, s)
-        #
-        #     mult_result = torch.autograd.Variable(torch.zeros(network_output.size()))
-        #
-        #     if torch.has_cudnn:
-        #         mult_result = mult_result.cuda()
-        #
-        #     for b_i in range(s_i_inds.shape[0]):
-        #         for c_i in range(s_i_inds.shape[1]):
-        #             if s_i_inds[b_i, c_i] == -1:
-        #                 mult_result[b_i, :, c_i] = -1 * network_output[b_i, :, c_i]
-        #             else:
-        #                 s_tmp = torch.autograd.Variable(torch.from_numpy(
-        #                     s[int(s_i_inds[b_i, c_i]), :]
-        #                 ).float())
-        #                 if torch.has_cudnn:
-        #                     s_tmp = s_tmp.cuda()
-        #                 mult_result[b_i, :, c_i] = network_output[b_i, :, c_i] * s_tmp
-        #
-        #     final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
-        #
-        #     # Calculate losses, do backward passing, and do updates
-        #     loss = loss_new_model(final_output, y_categorical, config.network_loss_weight)
-        #
-        #     reg_loss_l1 = 0
-        #     reg_loss_l2 = 0
-        #
-        #     if any([config.l1_factor > 0.0, config.l2_factor > 0.0]):
-        #         for name_p, param in network.named_parameters():
-        #             if 'rnn' in name_p:
-        #                 reg_loss_l1 += param.abs().mul(config.l1_factor).sum()
-        #             reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
-        #
-        #     loss += reg_loss_l1
-        #     loss += reg_loss_l2
-        #
-        #     optim.zero_grad()
-        #     loss.backward()
-        #
-        #     if config.grad_clip_norm > 0:
-        #         clip_grad_norm(network.parameters(), config.grad_clip_norm)
-        #
-        #     optim.step()
-        #
-        #     if print_grads:
-        #         e_time = time.time() - it_start_time
-        #         to_print = []
-        #         for param, name, module in iterate_params(network):
-        #             m_name = str(module)
-        #             if len(m_name) > 40:
-        #                 m_name = m_name[:37] + '...'
-        #             tmp_s = "{:9s} - {:-<40s}: Grad norm {:.5E} | Weight norm {:5E}".format(
-        #                 name, m_name, param.grad.norm(2).data[0],
-        #                 param.norm(2).data[0])
-        #             to_print.append(tmp_s)
-        #         print('Iteration: {:5d} | Elapsed time {}'.format(total_iterations, e_time))
-        #         for t_p in to_print:
-        #             print(t_p)
-        #         print('-'*len(to_print[0]))
-        #
-        #     losses.append(loss.data[0])
-        #     if torch.has_cudnn:
-        #         preds = final_output.cpu().data.numpy()
-        #         gds = y_categorical.cpu().data.numpy()
-        #     else:
-        #         preds = final_output.data.numpy()
-        #         gds = y_categorical.data.numpy()
-        #
-        #     metrics = tagging_metrics_categorical(
-        #             preds, gds, vehicle_classes + alarm_classes
-        #         )
-        #     accuracies.append(
-        #         metrics['f1']
-        #     )
-        #
-        #     if total_iterations % 10 == 0:
-        #         logger.log({
-        #             'iteration': total_iterations,
-        #             'epoch': epoch,
-        #             'records': {
-        #                 'training': dict(
-        #                     loss=np.mean(losses[-10:]),
-        #                     acc=np.mean(accuracies[-10:])),
-        #             }
-        #         })
-        #
-        #     total_iterations += 1
-        #     if config.lr_iterations > 0:
-        #         if divmod(total_iterations, config.lr_iterations)[-1] == 0:
-        #             state = optim.state_dict()
-        #             state['param_groups'][0]['lr'] = state['param_groups'][0]['lr'] * config.lr_factor
-        #             optim.load_state_dict(state)
-        #
-        # print('Epoch {:3d} | Elapsed train. time {:10.3f} sec(s) | Train. loss: {:10.6f}'.format(
-        #         epoch, time.time() - epoch_start_time,
-        #         np.mean(losses)))
+        if not no_tqdm:
+            epoch_iterator = tqdm(epoch_iterator,
+                                  total=50000 // config.batch_size)
+        for iteration, batch in epoch_iterator:
+            if print_grads:
+                it_start_time = time.time()
+            # Get input
+            if config.use_scaler:
+                x = get_input(batch[0], scaler)
+            else:
+                x = get_input_non_normalized(batch[0], scaler)
+
+            # Get target values
+            y_1_hot, y_categorical = get_output_new_model(batch[-2], batch[-1])
+
+            # network_output, attention_weights = network(x, y_1_hot.size()[1])
+            network_output, mlp_output = network(x[:, :, :, :64])
+
+            if torch.has_cudnn:
+                tmp_v = network_output.cpu().data.numpy()
+                tmp_classes = y_categorical.cpu().data.numpy()
+            else:
+                tmp_v = network_output.data.numpy()
+                tmp_classes = y_categorical.data.numpy()
+
+            max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(tmp_v, tmp_classes, s)
+
+            mult_result = torch.autograd.Variable(torch.zeros(network_output.size()))
+
+            if torch.has_cudnn:
+                mult_result = mult_result.cuda()
+
+            for b_i in range(s_i_inds.shape[0]):
+                for c_i in range(s_i_inds.shape[1]):
+                    if s_i_inds[b_i, c_i] == -1:
+                        mult_result[b_i, :, c_i] = -1 * network_output[b_i, :, c_i]
+                    else:
+                        s_tmp = torch.autograd.Variable(torch.from_numpy(
+                            s[int(s_i_inds[b_i, c_i]), :]
+                        ).float())
+                        if torch.has_cudnn:
+                            s_tmp = s_tmp.cuda()
+                        mult_result[b_i, :, c_i] = network_output[b_i, :, c_i] * s_tmp
+
+            final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
+
+            # Calculate losses, do backward passing, and do updates
+            loss = loss_new_model(final_output, y_categorical, config.network_loss_weight)
+
+            reg_loss_l1 = 0
+            reg_loss_l2 = 0
+
+            if any([config.l1_factor > 0.0, config.l2_factor > 0.0]):
+                for name_p, param in network.named_parameters():
+                    if 'rnn' in name_p:
+                        reg_loss_l1 += param.abs().mul(config.l1_factor).sum()
+                    reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
+
+            loss += reg_loss_l1
+            loss += reg_loss_l2
+
+            optim.zero_grad()
+            loss.backward()
+
+            if config.grad_clip_norm > 0:
+                clip_grad_norm(network.parameters(), config.grad_clip_norm)
+
+            optim.step()
+
+            if print_grads:
+                e_time = time.time() - it_start_time
+                to_print = []
+                for param, name, module in iterate_params(network):
+                    m_name = str(module)
+                    if len(m_name) > 40:
+                        m_name = m_name[:37] + '...'
+                    tmp_s = "{:9s} - {:-<40s}: Grad norm {:.5E} | Weight norm {:5E}".format(
+                        name, m_name, param.grad.norm(2).data[0],
+                        param.norm(2).data[0])
+                    to_print.append(tmp_s)
+                print('Iteration: {:5d} | Elapsed time {}'.format(total_iterations, e_time))
+                for t_p in to_print:
+                    print(t_p)
+                print('-'*len(to_print[0]))
+
+            losses.append(loss.data[0])
+            if torch.has_cudnn:
+                preds = final_output.cpu().data.numpy()
+                gds = y_categorical.cpu().data.numpy()
+            else:
+                preds = final_output.data.numpy()
+                gds = y_categorical.data.numpy()
+
+            metrics = tagging_metrics_categorical(
+                    preds, gds, vehicle_classes + alarm_classes
+                )
+            accuracies.append(
+                metrics['f1']
+            )
+
+            if total_iterations % 10 == 0:
+                logger.log({
+                    'iteration': total_iterations,
+                    'epoch': epoch,
+                    'records': {
+                        'training': dict(
+                            loss=np.mean(losses[-10:]),
+                            acc=np.mean(accuracies[-10:])),
+                    }
+                })
+
+            total_iterations += 1
+            if config.lr_iterations > 0:
+                if divmod(total_iterations, config.lr_iterations)[-1] == 0:
+                    state = optim.state_dict()
+                    state['param_groups'][0]['lr'] = state['param_groups'][0]['lr'] * config.lr_factor
+                    optim.load_state_dict(state)
+
+        print('Epoch {:3d} | Elapsed train. time {:10.3f} sec(s) | Train. loss: {:10.6f}'.format(
+                epoch, time.time() - epoch_start_time,
+                np.mean(losses)))
 
         # Validation
         network.eval()

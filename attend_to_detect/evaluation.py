@@ -953,10 +953,6 @@ def tagging_metrics_categorical(y_pred, y_true, all_labels, print_out=False):
 
         for i_f, file_data in enumerate(the_data):
             file_list = []
-            from IPython import embed
-            print(' -- ')
-            embed()
-            exit()
             for i_d, i in enumerate(file_data):
                 if i > 0.5:
                     file_list.append(

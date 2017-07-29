@@ -25,7 +25,7 @@ optimizer = Adadelta
 # optimizer = Adam
 optimizer_lr = 1e-6
 l1_factor = 0.
-l2_factor = 0.
+l2_factor = 0.001
 
 network_channels_out = [128, 128, 128, 128]
 network_cnn_kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]
@@ -63,7 +63,7 @@ network_dropout_rnn_recurrent = 0.25
 network_rnn_subsamplings = [1]
 
 mlp_dims = [128, 64, len(all_freqs_vehicles_first)]
-mlp_activations = [functional.relu, functional.relu, functional.tanh]
+mlp_activations = [functional.leaky_relu, functional.leaky_relu, functional.tanh]
 mlp_dropouts = [0.]
 
 last_rnn_dim = len(all_freqs_vehicles_first)

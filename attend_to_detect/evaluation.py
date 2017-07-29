@@ -269,7 +269,8 @@ def loss_new_model(y_pred, y_true, use_weights):
     loss = torch.nn.functional.cross_entropy(
         y_pred,
         y_true[:, 0],
-        weight=weights
+        weight=weights,
+        size_average=False
     )
 
     for i in range(1, y_true.size()[1]):

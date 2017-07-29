@@ -11,7 +11,7 @@ all_freqs_alarms_first = class_freqs_alarm + class_freqs_vehicle
 all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 
 # General variables
-batch_size = 16
+batch_size = 32
 epochs = 300
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 

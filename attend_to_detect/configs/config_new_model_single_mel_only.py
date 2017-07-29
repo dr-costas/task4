@@ -11,7 +11,7 @@ all_freqs_alarms_first = class_freqs_alarm + class_freqs_vehicle
 all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 
 # General variables
-batch_size = 64
+batch_size = 32
 epochs = 300
 lr_iterations = 900
 

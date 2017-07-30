@@ -128,7 +128,7 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    iterations_per_epoch = np.ceil(get_total_training_examples()/config.batch_size)
+    iterations_per_epoch = np.ceil(get_total_training_examples(config.dataset_full_path)/config.batch_size)
 
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)

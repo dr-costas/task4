@@ -297,7 +297,7 @@ def loss_new_model(y_pred, y_true, use_weights):
             target_class = y_true[b, c_target].data[0]
             if target_class > -1:
                 for c in range(y_pred.size()[1]):
-                    w = weights[target_class]
+                    w = weights[target_class:target_class+1]
                     y = y_pred[b, c]
                     if c != target_class:
                         loss += loss_negative(y, w)

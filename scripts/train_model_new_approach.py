@@ -16,7 +16,8 @@ from torch.nn.utils import clip_grad_norm
 from attend_to_detect.utils.msa_utils import *
 
 from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, \
-    get_output_new_model, get_data_stream_single_one_hot, get_input_non_normalized
+    get_output_new_model, get_data_stream_single_one_hot, get_input_non_normalized, \
+    get_total_examples
 
 from attend_to_detect.model.model_new_formulation import CategoryBranch2 as Model
 
@@ -127,6 +128,8 @@ def main():
         calculate_scaling_metrics=False,
     )
 
+    iterations_per_epoch = np.ceil(get_total_examples()/config.batch_size)
+
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)
     if args.visdom:
@@ -134,8 +137,12 @@ def main():
         title_losses = 'Train/valid losses'
         title_accu = 'Train/valid F1'
         if args.job_id != '':
-            title_losses += ' - Job ID: {}'.format(args.job_id)
-            title_accu += ' - Job ID: {}'.format(args.job_id)
+            title_losses += ' - ID: {} -'.format(args.job_id)
+            title_accu += ' - ID: {} -'.format(args.job_id)
+
+        title_losses += ' {} it/epoch'.format(iterations_per_epoch)
+        title_accu += ' {} it/epoch'.format(iterations_per_epoch)
+
         loss_handler = VisdomHandler(
             ['training', 'validation'],
             'loss',

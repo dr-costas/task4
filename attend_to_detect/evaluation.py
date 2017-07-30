@@ -258,6 +258,19 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
 
 
 def loss_new_model(y_pred, y_true, use_weights):
+
+    def loss_positive(y_pred_inner, the_class_weight):
+        return torch.nn.functional.binary_cross_entropy(
+            y_pred_inner, 1,
+            weight=the_class_weight, size_average=False
+        )
+
+    def loss_negative(y_pred_inner, the_class_weight):
+        return torch.nn.functional.binary_cross_entropy(
+            y_pred_inner, 0,
+            weight=the_class_weight, size_average=False
+        )
+
     if use_weights:
         local_weights_positive = [27218. / a for a in all_freqs_vehicles_first]
         weights = torch.from_numpy(np.array(local_weights_positive)).float()
@@ -267,25 +280,22 @@ def loss_new_model(y_pred, y_true, use_weights):
     if torch.has_cudnn and weights is not None:
         weights = weights.cuda()
 
-    loss = torch.nn.functional.cross_entropy(
-        y_pred,
-        y_true[:, 0],
-        weight=weights,
-        size_average=False
-    )
+    loss = torch.autograd.Variable(torch.zeros((1, )))
 
-    for i in range(1, y_true.size()[1]):
-        for ii in range(len(y_true[:, i])):
-            c = torch.ne(y_true[ii, i], -1)
-            if torch.has_cudnn:
-                c = c.cpu()
-            c = c.data[0]
-            if c:
-                loss += torch.nn.functional.cross_entropy(
-                    y_pred[ii:ii+1, :],
-                    y_true[ii:ii+1, i],
-                    weight=weights
-                )
+    if torch.has_cudnn:
+        loss = loss.cuda()
+
+    for b in range(y_pred.size()[0]):
+        for c_target in range(y_true.size()[1]):
+            target_class = y_true[b, c_target]
+            if target_class > -1:
+                for c in range(y_pred.size()[1]):
+                    w = weights[target_class]
+                    y = y_pred[b, c]
+                    if c != target_class:
+                        loss += loss_negative(y, w)
+                    else:
+                        loss += loss_positive(y, w)
 
     return loss
 

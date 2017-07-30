@@ -26,7 +26,7 @@ grad_clip_norm = 0.
 optimizer_lr = 1e-3
 lr_factor = .95
 l1_factor = 0.
-l2_factor = 0.001
+l2_factor = 0.01
 
 network_channels_out = [64, 64, 64, 64]
 network_cnn_kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]

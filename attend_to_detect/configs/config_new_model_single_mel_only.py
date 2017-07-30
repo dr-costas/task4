@@ -63,7 +63,7 @@ network_dropout_rnn_recurrent = 0.25
 
 network_rnn_subsamplings = [1]
 
-mlp_dims = [32*13, 128, 64, 32, len(all_freqs_vehicles_first)]
+mlp_dims = [128, 64, 32, len(all_freqs_vehicles_first)]
 mlp_activations = [functional.tanh]
 mlp_dropouts = [0.5]
 

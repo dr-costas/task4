@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import torch
+from torch.autograd import Variable
 from torch.nn.functional import cross_entropy, binary_cross_entropy, sigmoid
 from sed_eval.sound_event import SegmentBasedMetrics
 from attend_to_detect.evaluation_aux import FileFormat
@@ -260,14 +261,20 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
 def loss_new_model(y_pred, y_true, use_weights):
 
     def loss_positive(y_pred_inner, the_class_weight):
+        target_val = Variable(torch.ones((1,)))
+        if torch.has_cudnn:
+            target_val = target_val.cuda()
         return torch.nn.functional.binary_cross_entropy(
-            y_pred_inner, 1,
+            y_pred_inner, target_val,
             weight=the_class_weight, size_average=False
         )
 
     def loss_negative(y_pred_inner, the_class_weight):
+        target_val = Variable(torch.zeros((1,)))
+        if torch.has_cudnn:
+            target_val = target_val.cuda()
         return torch.nn.functional.binary_cross_entropy(
-            y_pred_inner, 0,
+            y_pred_inner, target_val,
             weight=the_class_weight, size_average=False
         )
 
@@ -280,7 +287,7 @@ def loss_new_model(y_pred, y_true, use_weights):
     if torch.has_cudnn and weights is not None:
         weights = weights.cuda()
 
-    loss = torch.autograd.Variable(torch.zeros((1, )))
+    loss = Variable(torch.zeros((1, )))
 
     if torch.has_cudnn:
         loss = loss.cuda()

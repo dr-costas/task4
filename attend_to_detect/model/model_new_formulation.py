@@ -300,10 +300,15 @@ class CategoryBranch2(nn.Module):
                 self.last_rnn_dropout_h(h_s[:, s_i - 1, :])
             ))
 
-        for s_i in range(o_size[1]):
-            h_s[:, s_i, :] = nn.functional.sigmoid(h_s[:, s_i, :])
+        recurrent_to_return = Variable(torch.zeros(h_s.size()))
 
-        return h_s, mlp_output
+        if torch.has_cudnn:
+            recurrent_to_return = recurrent_to_return.cuda()
+
+        for s_i in range(o_size[1]):
+            recurrent_to_return[:, s_i, :] = nn.functional.sigmoid(h_s[:, s_i, :])
+
+        return recurrent_to_return, mlp_output
 
     def nb_trainable_parameters(self):
         nb_params = 0

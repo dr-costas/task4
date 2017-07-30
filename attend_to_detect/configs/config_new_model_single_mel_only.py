@@ -28,7 +28,7 @@ lr_factor = .95
 l1_factor = 0.
 l2_factor = 0.001
 
-network_channels_out = [128, 128, 128, 128]
+network_channels_out = [64, 64, 64, 64]
 network_cnn_kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]
 network_cnn_strides = [(1, 1), (2, 2), (2, 2), (2, 2)]
 network_cnn_paddings = [(0, 0), (1, 1), (1, 1), (1, 1)]
@@ -48,8 +48,8 @@ network_pool_paddings = [(0, 0), (1, 1), (1, 1), (1, 1)]
 # network_pool_strides = [(2, 2), (2, 2), (2, 2)]  # , (2, 2)]
 # network_pool_paddings = [(1, 1), (1, 1), (1, 1)]  # , (1, 1)]
 
-network_rnn_input_size = 128
-network_rnn_output_dims = [256, 256]  #, 256]
+network_rnn_input_size = 64
+network_rnn_output_dims = [64, 32]  #, 256]
 
 network_rnn_activations = [functional.tanh]
 
@@ -63,8 +63,8 @@ network_dropout_rnn_recurrent = 0.25
 
 network_rnn_subsamplings = [1]
 
-mlp_dims = [len(all_freqs_vehicles_first)]
-mlp_activations = [functional.tanh]
+mlp_dims = [16*13, len(all_freqs_vehicles_first)]
+mlp_activations = [functional.leaky_relu, functional.tanh]
 mlp_dropouts = [0.25]
 
 last_rnn_dim = len(all_freqs_vehicles_first)

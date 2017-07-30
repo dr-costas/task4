@@ -292,6 +292,8 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples):
     if torch.has_cudnn:
         loss = loss.cuda()
 
+    total_additions = 0
+
     for b in range(y_pred.size()[0]):
         for c_target in range(y_true.size()[1]):
             target_class = y_true[b, c_target].data[0]
@@ -303,8 +305,9 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples):
                         loss += loss_negative(y, w)
                     else:
                         loss += loss_positive(y, w)
+                    total_additions += 1
 
-    return loss
+    return loss/total_additions
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -688,7 +691,7 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
         if torch.has_cudnn:
             loss_tmp = loss_tmp.cpu()
 
-        loss += loss_tmp.data[0]/b_size
+        loss += loss_tmp.data[0]
 
         valid_batches += 1
 

@@ -304,7 +304,7 @@ def loss_new_model(y_pred, y_true, use_weights):
                     else:
                         loss += loss_positive(y, w)
 
-    return loss
+    return loss/y_pred.size()[0]
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -1014,7 +1014,6 @@ def tagging_metrics_categorical(y_pred, y_true, all_labels, print_out=False):
         data_true.append(f_data_a)
 
     return task_a_evaluation(data_pred, data_true, print_out)
-    # return tagging_metrics_from_list(data_pred, data_true, all_labels)
 
 
 def task_a_evaluation(data_pred, data_true, print_out=False):

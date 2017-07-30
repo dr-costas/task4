@@ -13,7 +13,7 @@ all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 # General variables
 batch_size = 32
 epochs = 300
-lr_iterations = 900
+lr_iterations = 1600
 
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 
@@ -26,7 +26,7 @@ grad_clip_norm = 0.
 optimizer_lr = 1e-4
 lr_factor = .95
 l1_factor = 0.
-l2_factor = 0.001
+l2_factor = 0.01
 
 network_channels_out = [128, 128, 128, 128]
 network_cnn_kernel_sizes = [(5, 5), (5, 5), (5, 5), (5, 5)]

@@ -128,14 +128,16 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    iterations_per_epoch = np.ceil(get_total_training_examples(config.dataset_full_path)/config.batch_size)
+    total_examples = get_total_training_examples(config.dataset_full_path)
+
+    iterations_per_epoch = np.ceil(total_examples/config.batch_size)
 
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)
     if args.visdom:
         from attend_to_detect.utils.visdom_handler import VisdomHandler
-        title_losses = 'Train/valid losses'
-        title_accu = 'Train/valid F1'
+        title_losses = 'Loss'
+        title_accu = 'F1'
         if args.job_id != '':
             title_losses += ' - ID: {} -'.format(args.job_id)
             title_accu += ' - ID: {} -'.format(args.job_id)
@@ -164,7 +166,7 @@ def main():
         train_loop(
             config, network,
             train_data, valid_data, scaler, optim, args.print_grads, logger,
-            args.checkpoint_path, args.no_tqdm)
+            args.checkpoint_path, args.no_tqdm, total_examples)
 
 
 def iterate_params(pytorch_module):
@@ -179,7 +181,7 @@ def iterate_params(pytorch_module):
 
 
 def train_loop(config, network, train_data, valid_data, scaler,
-               optim, print_grads, logger, checkpoint_path, no_tqdm):
+               optim, print_grads, logger, checkpoint_path, no_tqdm, total_examples):
     total_iterations = 0
     s = get_s_2(config.rnn_time_steps_out)
     # loss_module = torch.nn.MSELoss()
@@ -236,7 +238,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
 
             # Calculate losses, do backward passing, and do updates
-            loss = loss_new_model(final_output, y_categorical, config.network_loss_weight)/config.batch_size
+            loss = loss_new_model(final_output, y_categorical, config.network_loss_weight, total_examples)
 
             reg_loss_l1 = 0
             reg_loss_l2 = 0

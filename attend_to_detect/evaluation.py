@@ -258,7 +258,7 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
     )
 
 
-def loss_new_model(y_pred, y_true, use_weights):
+def loss_new_model(y_pred, y_true, use_weights, total_examples):
 
     def loss_positive(y_pred_inner, the_class_weight):
         target_val = Variable(torch.ones((1,)))
@@ -279,7 +279,7 @@ def loss_new_model(y_pred, y_true, use_weights):
         )
 
     if use_weights:
-        local_weights_positive = [27218. / a for a in all_freqs_vehicles_first]
+        local_weights_positive = [total_examples / a for a in all_freqs_vehicles_first]
         weights = torch.from_numpy(np.array(local_weights_positive)).float()
     else:
         weights = None
@@ -304,7 +304,7 @@ def loss_new_model(y_pred, y_true, use_weights):
                     else:
                         loss += loss_positive(y, w)
 
-    return loss/y_pred.size()[0]
+    return loss
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -636,7 +636,7 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
 
 
 def validate_single_new_model(valid_data, network, scaler, logger, total_iterations,
-                              epoch, use_weights, s, b_size):
+                              epoch, use_weights, s, b_size, total_examples):
     valid_batches = 0
     loss = 0.0
 
@@ -683,7 +683,7 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
         final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
 
         # Calculate losses, do backward passing, and do updates
-        loss_tmp = loss_new_model(final_output, y_categorical, use_weights)
+        loss_tmp = loss_new_model(final_output, y_categorical, use_weights, total_examples)
 
         if torch.has_cudnn:
             loss_tmp = loss_tmp.cpu()

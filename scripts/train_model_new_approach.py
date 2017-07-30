@@ -17,7 +17,7 @@ from attend_to_detect.utils.msa_utils import *
 
 from attend_to_detect.dataset import vehicle_classes, alarm_classes, get_input, \
     get_output_new_model, get_data_stream_single_one_hot, get_input_non_normalized, \
-    get_total_examples
+    get_total_training_examples
 
 from attend_to_detect.model.model_new_formulation import CategoryBranch2 as Model
 
@@ -128,7 +128,7 @@ def main():
         calculate_scaling_metrics=False,
     )
 
-    iterations_per_epoch = np.ceil(get_total_examples()/config.batch_size)
+    iterations_per_epoch = np.ceil(get_total_training_examples()/config.batch_size)
 
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)

@@ -145,8 +145,8 @@ def get_data_stream_single_one_hot(batch_size, dataset_name='dcase_2017_task_4_t
     return stream, None
 
 
-def get_total_examples(dataset_name='dcase_2017_task_4_test.hdf5'):
-    dataset = H5PYDataset(dataset_name, which_sets=(that_set,), load_in_memory=False)
+def get_total_training_examples(dataset_name='dcase_2017_task_4_test.hdf5'):
+    dataset = H5PYDataset(dataset_name, which_sets=('train',), load_in_memory=False)
     return dataset.num_examples
 
 

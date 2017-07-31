@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 import torch
 from torch.nn.utils import clip_grad_norm
+from torch.nn import functional
 
 from attend_to_detect.utils.msa_utils import *
 
@@ -24,7 +25,15 @@ from attend_to_detect.model.model_new_formulation import CategoryBranch2 as Mode
 from attend_to_detect.evaluation import validate_single_new_model, \
     loss_new_model, tagging_metrics_categorical
 
+from shutil import copyfile
+
 __docformat__ = 'reStructuredText'
+
+
+def output_config(config):
+    for k, v in config.__dict__.items():
+        if not k.startswith('__'):
+            print('{} | {}'.format(k, v))
 
 
 def main():
@@ -46,6 +55,7 @@ def main():
         torch.has_cudnn = False
 
     config = importlib.import_module(args.config_file)
+    output_config(config)
 
     # The alarm branch layers
     network = Model(
@@ -74,6 +84,7 @@ def main():
         last_rnn_activation=config.last_rnn_activation,
         last_rnn_dropout_i=config.last_rnn_dropout_i,
         last_rnn_dropout_h=config.last_rnn_dropout_h,
+        last_rnn_extra_activation=config.last_rnn_extra_activation
     )
 
     print('Total parameters: {}'.format(network.nb_trainable_parameters()))
@@ -84,6 +95,11 @@ def main():
 
     # Create optimizer for all parameters
     optim = config.optimizer(network.parameters(), lr=config.optimizer_lr)  #, weight_decay=1e-6)
+
+    if not os.path.exists(config.dataset_local_path):
+        print('Copying dataset')
+        copyfile(config.dataset_full_path, config.dataset_local_path)
+        print('Dataset copied')
 
     # Do we have a checkpoint?
     if os.path.isdir(args.checkpoint_path):
@@ -106,13 +122,13 @@ def main():
         with open('scaler_2.pkl', 'rb') as f:
             scaler = pickle.load(f)
         train_data, _ = get_data_stream_single_one_hot(
-            dataset_name=config.dataset_full_path,
+            dataset_name=config.dataset_local_path,
             batch_size=config.batch_size,
             calculate_scaling_metrics=False,
             examples=examples)
     else:
         train_data, scaler = get_data_stream_single_one_hot(
-            dataset_name=config.dataset_full_path,
+            dataset_name=config.dataset_local_path,
             batch_size=config.batch_size,
             calculate_scaling_metrics=True,
             examples=examples)
@@ -122,36 +138,37 @@ def main():
 
     # Get the validation data stream
     valid_data, _ = get_data_stream_single_one_hot(
-        dataset_name=config.dataset_full_path,
+        dataset_name=config.dataset_local_path,
         batch_size=config.batch_size,
         that_set='test',
         calculate_scaling_metrics=False,
     )
 
-    total_training_examples = get_total_training_examples(config.dataset_full_path)
-    total_validation_examples = get_total_validation_examples(config.dataset_full_path)
+    total_training_examples = get_total_training_examples(config.dataset_local_path)
+    total_validation_examples = get_total_validation_examples(config.dataset_local_path)
 
     iterations_per_epoch = np.ceil(total_training_examples/config.batch_size)
 
     logger = Logger("{}_log.jsonl.gz".format(args.checkpoint_path),
                     formatter=None)
+
     if args.visdom:
         from attend_to_detect.utils.visdom_handler import VisdomHandler
-        title_losses = 'Loss'
-        title_accu = 'F1'
+        title_losses = ''
+        title_accu = ''
         if args.job_id != '':
-            title_losses += ' - ID: {} -'.format(args.job_id)
-            title_accu += ' - ID: {} -'.format(args.job_id)
+            title_losses += 'ID: {} - '.format(args.job_id)
+            title_accu += 'ID: {} - '.format(args.job_id)
 
-        title_losses += ' {} it/epoch'.format(iterations_per_epoch)
-        title_accu += ' {} it/epoch'.format(iterations_per_epoch)
+        title_losses += '{} it/epoch'.format(iterations_per_epoch)
+        title_accu += '{} it/epoch'.format(iterations_per_epoch)
 
         loss_handler = VisdomHandler(
             ['training', 'validation'],
             'loss',
             dict(title=title_losses,
                  xlabel='iteration',
-                 ylabel='cross-entropy'),
+                 ylabel='Loss'),
             server=args.visdom_server, port=args.visdom_port)
         logger.handlers.append(loss_handler)
         accuracy_handler = VisdomHandler(
@@ -159,7 +176,7 @@ def main():
             'acc',
             dict(title=title_accu,
                  xlabel='iteration',
-                 ylabel='F1, %'),
+                 ylabel='F1 (%)'),
             server=args.visdom_server, port=args.visdom_port)
         logger.handlers.append(accuracy_handler)
 
@@ -186,7 +203,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
                total_training_examples, total_validation_examples):
     total_iterations = 0
     s = get_s_2(config.rnn_time_steps_out)
-    # loss_module = torch.nn.MSELoss()
+
     for epoch in range(config.epochs):
         network.train()
         losses = []
@@ -195,7 +212,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
         epoch_iterator = enumerate(train_data.get_epoch_iterator())
         if not no_tqdm:
             epoch_iterator = tqdm(epoch_iterator,
-                                  total=50000 // config.batch_size)
+                                  total=total_training_examples // config.batch_size)
         for iteration, batch in epoch_iterator:
             if print_grads:
                 it_start_time = time.time()
@@ -208,8 +225,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
             # Get target values
             y_1_hot, y_categorical = get_output_new_model(batch[-2], batch[-1])
 
-            # network_output, attention_weights = network(x, y_1_hot.size()[1])
-            network_output, mlp_output = network(x[:, :, :, :64])
+            network_output, mlp_output = network(x[:, :, :, :config.nb_features])
 
             if torch.has_cudnn:
                 tmp_v = network_output.cpu().data.numpy()
@@ -218,9 +234,12 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 tmp_v = network_output.data.numpy()
                 tmp_classes = y_categorical.data.numpy()
 
-            max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(tmp_v, tmp_classes, s)
+            max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(
+                tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
 
-            mult_result = torch.autograd.Variable(torch.zeros(network_output.size()))
+            mult_result = torch.autograd.Variable(
+                torch.zeros(network_output.size()),
+            )
 
             if torch.has_cudnn:
                 mult_result = mult_result.cuda()
@@ -237,10 +256,20 @@ def train_loop(config, network, train_data, valid_data, scaler,
                             s_tmp = s_tmp.cuda()
                         mult_result[b_i, :, c_i] = network_output[b_i, :, c_i] * s_tmp
 
-            final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
+            final_output = functional.sigmoid(
+                mlp_output * mult_result.mean(1).squeeze()
+            )
+
+            # print(mult_result.mean(1).squeeze())
+            # print('*' * 50)
+            # print(final_output)
+            # print('-'*50)
 
             # Calculate losses, do backward passing, and do updates
-            loss = loss_new_model(final_output, y_categorical, config.network_loss_weight, total_training_examples)
+            loss = loss_new_model(
+                final_output, y_categorical,
+                config.network_loss_weight, config.batch_size, config.weighting_factor
+            )
 
             reg_loss_l1 = 0
             reg_loss_l2 = 0
@@ -248,8 +277,10 @@ def train_loop(config, network, train_data, valid_data, scaler,
             if any([config.l1_factor > 0.0, config.l2_factor > 0.0]):
                 for name_p, param in network.named_parameters():
                     if 'rnn' in name_p or 'mlp' in name_p or 'cnn' in name_p:
-                        reg_loss_l1 += param.abs().mul(config.l1_factor).sum()
-                    reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
+                        if config.l1_factor > 0.:
+                            reg_loss_l1 += param.abs().mul(config.l1_factor).sum()
+                    if config.l2_factor > 0.:
+                        reg_loss_l2 += param.pow(2).mul(config.l2_factor).sum()
 
             loss += reg_loss_l1
             loss += reg_loss_l2
@@ -287,7 +318,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 gds = y_categorical.data.numpy()
 
             metrics = tagging_metrics_categorical(
-                    preds, gds, vehicle_classes + alarm_classes
+                    preds, gds, vehicle_classes + alarm_classes, False
                 )
             accuracies.append(
                 metrics['f1']
@@ -318,8 +349,8 @@ def train_loop(config, network, train_data, valid_data, scaler,
         # Validation
         network.eval()
         validate_single_new_model(
-            valid_data, network, scaler, logger, total_iterations, epoch, config.network_loss_weight, s,
-            total_validation_examples
+            valid_data, network, scaler, logger, total_iterations, epoch,
+            config, s, total_validation_examples
         )
 
         # Checkpoint

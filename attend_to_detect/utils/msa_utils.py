@@ -41,7 +41,7 @@ def get_s_2(t_steps):
 
 
 @numba.jit(nopython=True, nogil=True)
-def find_max_mean(batch_array, target_classes, s):
+def find_max_mean(batch_array, target_classes, s, total_classes):
     """
 
     :param batch_array: (b_size, t_steps, num_classes)
@@ -50,25 +50,31 @@ def find_max_mean(batch_array, target_classes, s):
     :type s: numpy.core.multiarray.ndarray
     :param target_classes: (b_size, num_classes) | binary indication of classes
     :type target_classes: numpy.core.multiarray.ndarray
+    :param total_classes: total amount of classes
+    :type total_classes: int
     :return:
     :rtype:
     """
     b_size = batch_array.shape[0]
+    zeros_size = (b_size, total_classes)
+    max_means = np.zeros(zeros_size)
+    max_means_index_start = np.zeros(zeros_size)
+    max_means_index_end = np.zeros(zeros_size)
+    s_i_indices = np.zeros(zeros_size)
+    active_classes = np.zeros(zeros_size)
 
-    num_classes = target_classes.shape[-1]
-
-    max_means = np.zeros((b_size, num_classes))
-    max_means_index_start = np.zeros((b_size, num_classes))
-    max_means_index_end = np.zeros((b_size, num_classes))
-    s_i_indices = np.zeros((b_size, num_classes))
+    for b_i in range(target_classes.shape[0]):
+        for active_class in target_classes[b_i]:
+            if active_class != -1:
+                active_classes[b_i, active_class] = 1
 
     for b_index in range(b_size):
 
-        for class_index in range(num_classes):
+        for class_index in range(total_classes):
 
             class_array = np.copy(batch_array[b_index, :, class_index])
 
-            if target_classes[b_index, class_index] == 0:
+            if active_classes[b_index, class_index] == 0:
                 class_array *= -1
                 max_means[b_index, class_index] = class_array.mean()
                 max_means_index_start[b_index, class_index] = 0

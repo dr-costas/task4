@@ -31,7 +31,8 @@ class CategoryBranch2(nn.Module):
                  rnn_subsamplings, rnn_t_steps_out,
                  mlp_dims, mlp_activations, mlp_dropouts,
                  last_rnn_dim, last_rnn_activation, last_rnn_dropout_i,
-                 last_rnn_dropout_h, init=xavier_normal):
+                 last_rnn_dropout_h, last_rnn_extra_activation=None,
+                 init=xavier_normal):
 
         super(CategoryBranch2, self).__init__()
 
@@ -103,6 +104,8 @@ class CategoryBranch2(nn.Module):
         self.rnn_dropout_layers_recurrent_b = []
         self.mlps = []
         self.mlps_dropouts = []
+
+        self.last_rnn_extra_activation = last_rnn_extra_activation
 
         for i in range(len(self.cnn_channels_out) - 1):
             self.cnn_layers.append(nn.Conv2d(
@@ -187,11 +190,11 @@ class CategoryBranch2(nn.Module):
         self.initialize(init)
 
     @staticmethod
-    def init_gru_cell(for_module, init):
+    def init_gru_cell(for_module, init, bias_init=0):
         init(for_module.weight_ih.data)
         init(for_module.weight_hh.data)
-        constant(for_module.bias_ih.data, 0)
-        constant(for_module.bias_hh.data, 0)
+        constant(for_module.bias_ih.data, bias_init)
+        constant(for_module.bias_hh.data, bias_init)
 
     def initialize(self, init):
         # Initialize CNNs
@@ -200,8 +203,11 @@ class CategoryBranch2(nn.Module):
             constant(a_cnn_layer.bias.data, 0)
 
         # Initialize RNNs
-        for an_rnn_layer in self.rnn_layers_f + self.rnn_layers_b + [self.last_rnn_layer]:
+        for an_rnn_layer in self.rnn_layers_f + self.rnn_layers_b:
             self.init_gru_cell(an_rnn_layer, init)
+
+        for an_rnn_layer in self.rnn_layers_f + self.rnn_layers_b:
+            self.init_gru_cell(an_rnn_layer, init, 0)
 
         # Initialize MLPs
         for a_linear_layer in self.mlps:
@@ -300,15 +306,18 @@ class CategoryBranch2(nn.Module):
                 self.last_rnn_dropout_h(h_s[:, s_i - 1, :])
             ))
 
-        recurrent_to_return = Variable(torch.zeros(h_s.size()))
+        if self.last_rnn_extra_activation is not None:
 
-        if torch.has_cudnn:
-            recurrent_to_return = recurrent_to_return.cuda()
+            recurrent_to_return = Variable(torch.zeros(h_s.size()))
 
-        for s_i in range(o_size[1]):
-            recurrent_to_return[:, s_i, :] = nn.functional.sigmoid(h_s[:, s_i, :])
+            if torch.has_cudnn:
+                recurrent_to_return = recurrent_to_return.cuda()
 
-        return recurrent_to_return, mlp_output
+            for s_i in range(o_size[1]):
+                recurrent_to_return[:, s_i, :] = self.last_rnn_extra_activation(h_s[:, s_i, :])
+
+            return recurrent_to_return, mlp_output
+        return h_s, mlp_output
 
     def nb_trainable_parameters(self):
         nb_params = 0

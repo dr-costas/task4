@@ -258,7 +258,7 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
     )
 
 
-def loss_new_model(y_pred, y_true, use_weights, total_examples):
+def loss_new_model(y_pred, y_true, use_weights, total_examples, weight_factor):
 
     def loss_positive(y_pred_inner, the_class_weight):
         target_val = Variable(torch.ones((1,)))
@@ -279,7 +279,7 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples):
         )
 
     if use_weights:
-        local_weights_positive = [total_examples / a for a in all_freqs_vehicles_first]
+        local_weights_positive = [weight_factor / a for a in all_freqs_vehicles_first]
         weights = torch.from_numpy(np.array(local_weights_positive)).float()
     else:
         weights = None
@@ -287,7 +287,7 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples):
     if torch.has_cudnn and weights is not None:
         weights = weights.cuda()
 
-    loss = Variable(torch.zeros((1, )))
+    loss = Variable(torch.zeros((1, )), requires_grad=True)
 
     if torch.has_cudnn:
         loss = loss.cuda()
@@ -307,7 +307,8 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples):
                         loss += loss_positive(y, w)
                     total_additions += 1
 
-    return loss/total_additions
+    return loss/total_examples
+    # return loss/total_additions
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -639,7 +640,7 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
 
 
 def validate_single_new_model(valid_data, network, scaler, logger, total_iterations,
-                              epoch, use_weights, s, total_examples):
+                              epoch, config, s, total_validation_examples):
     valid_batches = 0
     loss = 0.0
 
@@ -655,7 +656,7 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
         y_1_hot, y_categorical = get_output_new_model(batch[-2], batch[-1])
 
         # Go through the alarm branch
-        output, mlp_output = network(x[:, :, :, :64])
+        output, mlp_output = network(x[:, :, :, :config.nb_features])
 
         if torch.has_cudnn:
             tmp_v = output.cpu().data.numpy()
@@ -664,7 +665,8 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
             tmp_v = output.data.numpy()
             tmp_classes = y_categorical.data.numpy()
 
-        max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(tmp_v, tmp_classes, s)
+        max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(
+            tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
 
         mult_result = torch.autograd.Variable(torch.zeros(output.size()))
 
@@ -686,7 +688,10 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
         final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
 
         # Calculate losses, do backward passing, and do updates
-        loss_tmp = loss_new_model(final_output, y_categorical, use_weights, total_examples)
+        loss_tmp = loss_new_model(
+            final_output, y_categorical,
+            config.network_loss_weight,
+            config.batch_size, config.weighting_factor)
 
         if torch.has_cudnn:
             loss_tmp = loss_tmp.cpu()
@@ -967,6 +972,8 @@ def tagging_metrics_categorical(y_pred, y_true, all_labels, print_out=False):
     :type y_true: numpy.core.multiarray.ndarray
     :param all_labels: A list with all the labels **including** the <EOS> at the 0th index
     :type all_labels: list[str]
+    :param print_out:
+    :type print_out: bool
     :return:
     :rtype:
     """
@@ -985,6 +992,15 @@ def tagging_metrics_categorical(y_pred, y_true, all_labels, print_out=False):
                             'event_label': the_labels[i_d]
                         }
                     )
+            if len(file_list) == 0:
+                file_list.append(
+                    {
+                        'audio_file': 'audio_file_id_{}'.format(i_f),
+                        'event_offset': 10.00,
+                        'event_onset': 00.00,
+                        'event_label': ''
+                    }
+                )
             all_files_list.append(file_list)
 
         return all_files_list

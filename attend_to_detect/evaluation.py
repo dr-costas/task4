@@ -639,7 +639,7 @@ def validate_single_one_hot(valid_data, network, scaler, logger, total_iteration
 
 
 def validate_single_new_model(valid_data, network, scaler, logger, total_iterations,
-                              epoch, use_weights, s, b_size, total_examples):
+                              epoch, use_weights, s, total_examples):
     valid_batches = 0
     loss = 0.0
 

@@ -665,27 +665,27 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
             tmp_v = output.data.numpy()
             tmp_classes = y_categorical.data.numpy()
 
-        max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(
-            tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
+        #max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(
+        #    tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
 
-        mult_result = torch.autograd.Variable(torch.zeros(output.size()))
+        # mult_result = torch.autograd.Variable(torch.zeros(output.size()))
 
-        if torch.has_cudnn:
-            mult_result = mult_result.cuda()
+        # if torch.has_cudnn:
+        #    mult_result = mult_result.cuda()
 
-        for b_i in range(s_i_inds.shape[0]):
-            for c_i in range(s_i_inds.shape[1]):
-                if s_i_inds[b_i, c_i] == -1:
-                    mult_result[b_i, :, c_i] = -1 * output[b_i, :, c_i]
-                else:
-                    s_tmp = torch.autograd.Variable(torch.from_numpy(
-                        s[int(s_i_inds[b_i, c_i]), :]
-                    ).float())
-                    if torch.has_cudnn:
-                        s_tmp = s_tmp.cuda()
-                    mult_result[b_i, :, c_i] = output[b_i, :, c_i] * s_tmp
+        # for b_i in range(s_i_inds.shape[0]):
+        #    for c_i in range(s_i_inds.shape[1]):
+        #        if s_i_inds[b_i, c_i] == -1:
+        #            mult_result[b_i, :, c_i] = -1 * output[b_i, :, c_i]
+        #        else:
+        #            s_tmp = torch.autograd.Variable(torch.from_numpy(
+        #                s[int(s_i_inds[b_i, c_i]), :]
+        #            ).float())
+        #            if torch.has_cudnn:
+        #                s_tmp = s_tmp.cuda()
+        #            mult_result[b_i, :, c_i] = output[b_i, :, c_i] * s_tmp
 
-        final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1))
+        final_output = torch.nn.functional.sigmoid(mlp_output * output.mean(1))
 
         # Calculate losses, do backward passing, and do updates
         loss_tmp = loss_new_model(

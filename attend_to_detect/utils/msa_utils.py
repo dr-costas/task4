@@ -5,6 +5,7 @@
 import numpy as np
 import itertools
 import numba
+import torch
 
 __docformat__ = 'reStructuredText'
 
@@ -41,7 +42,7 @@ def get_s_2(t_steps):
 
 
 @numba.jit(nopython=True, nogil=True)
-def find_max_mean(batch_array, target_classes, s, total_classes):
+def find_max_mean_original(batch_array, target_classes, s, total_classes):
     """
 
     :param batch_array: (b_size, t_steps, num_classes)
@@ -58,8 +59,6 @@ def find_max_mean(batch_array, target_classes, s, total_classes):
     b_size = batch_array.shape[0]
     zeros_size = (b_size, total_classes)
     max_means = np.zeros(zeros_size)
-    max_means_index_start = np.zeros(zeros_size)
-    max_means_index_end = np.zeros(zeros_size)
     s_i_indices = np.zeros(zeros_size)
     active_classes = np.zeros(zeros_size)
 
@@ -77,40 +76,26 @@ def find_max_mean(batch_array, target_classes, s, total_classes):
             if active_classes[b_index, class_index] == 0:
                 class_array *= -1
                 max_means[b_index, class_index] = class_array.mean()
-                max_means_index_start[b_index, class_index] = 0
-                max_means_index_end[b_index, class_index] = 0
                 s_i_indices[b_index, class_index] = -1
 
             else:
                 tmp_max_means = np.zeros(len(s))
-                tmp_max_means_start = np.zeros(len(s))
-                tmp_max_means_end = np.zeros(len(s))
                 s_i_indices_tmp = np.zeros(len(s))
 
                 for s_i in range(len(s)):
                     local_array = class_array * s[s_i, :]
                     tmp_max_means[s_i] = local_array.mean()
-                    g = s[s_i, :]
-                    ind = np.where(g == 1)
-                    indices = ind[0]
-                    if len(indices) == 0:
-                        tmp_max_means_start[s_i] = 0
-                        tmp_max_means_end[s_i] = 0
-                    else:
-                        tmp_max_means_start[s_i] = indices[0]
-                        tmp_max_means_end[s_i] = indices[-1]
                     s_i_indices_tmp[s_i] = s_i
 
                 max_index = np.argmax(tmp_max_means)
                 max_means[b_index, class_index] = tmp_max_means[max_index]
-                max_means_index_start[b_index, class_index] = tmp_max_means_start[max_index]
-                max_means_index_end[b_index, class_index] = tmp_max_means_end[max_index]
                 s_i_indices[b_index, class_index] = s_i_indices_tmp[max_index]
 
-    return max_means, s_i_indices, max_means_index_end, max_means_index_end
+    return max_means, s_i_indices
 
 
-def find_max_mean_2(batch_array, target_classes, s):
+@numba.jit(nopython=True, nogil=True)
+def find_max_mean_2(batch_array, target_classes, s, total_classes):
     """
 
     :param batch_array: (b_size, t_steps, num_classes)
@@ -119,53 +104,134 @@ def find_max_mean_2(batch_array, target_classes, s):
     :type s: numpy.core.multiarray.ndarray
     :param target_classes: (b_size, num_classes) | binary indication of classes
     :type target_classes: numpy.core.multiarray.ndarray
+    :param total_classes: total amount of classes
+    :type total_classes: int
     :return:
     :rtype:
     """
     b_size = batch_array.shape[0]
+    zeros_size = (b_size, total_classes)
+    max_means = np.zeros(zeros_size)
+    s_i_indices = np.zeros(zeros_size)
+    active_classes = np.zeros(zeros_size)
 
-    num_classes = target_classes.shape[-1]
-
-    max_means = np.zeros((b_size, num_classes))
-    max_means_index_start = np.zeros((b_size, num_classes))
-    max_means_index_end = np.zeros((b_size, num_classes))
+    for b_i in range(target_classes.shape[0]):
+        for active_class in target_classes[b_i]:
+            if active_class != -1:
+                active_classes[b_i, active_class] = 1
 
     for b_index in range(b_size):
 
-        for class_index in range(num_classes):
+        for class_index in range(total_classes):
 
             class_array = np.copy(batch_array[b_index, :, class_index])
 
-            if target_classes[b_index, class_index] == 0:
-                class_array *= -1
+            if active_classes[b_index, class_index] == 0:
                 max_means[b_index, class_index] = class_array.mean()
-                max_means_index_start[b_index, class_index] = 0
-                max_means_index_end[b_index, class_index] = 0
+                s_i_indices[b_index, class_index] = -1
 
             else:
                 tmp_max_means = np.zeros(len(s))
-                tmp_max_means_start = np.zeros(len(s))
-                tmp_max_means_end = np.zeros(len(s))
+                s_i_indices_tmp = np.zeros(len(s))
 
                 for s_i in range(len(s)):
                     local_array = class_array * s[s_i, :]
                     tmp_max_means[s_i] = local_array.mean()
-                    g = s[s_i, :]
-                    ind = np.where(g == 1)
-                    indices = ind[0]
-                    if len(indices) == 0:
-                        tmp_max_means_start[s_i] = 0
-                        tmp_max_means_end[s_i] = 0
-                    else:
-                        tmp_max_means_start[s_i] = indices[0]
-                        tmp_max_means_end[s_i] = indices[-1]
+                    s_i_indices_tmp[s_i] = s_i
 
                 max_index = np.argmax(tmp_max_means)
                 max_means[b_index, class_index] = tmp_max_means[max_index]
-                max_means_index_start[b_index, class_index] = tmp_max_means_start[max_index]
-                max_means_index_end[b_index, class_index] = tmp_max_means_end[max_index]
+                s_i_indices[b_index, class_index] = s_i_indices_tmp[max_index]
 
-    return max_means, max_means_index_end, max_means_index_end
+    return max_means, s_i_indices
+
+
+@numba.jit(nopython=True, nogil=True)
+def find_max_mean_3(batch_array, target_classes, s, total_classes):
+    """
+
+    :param batch_array: (b_size, t_steps, num_classes)
+    :type batch_array: numpy.core.multiarray.ndarray
+    :param s: shape (X, t_steps)
+    :type s: numpy.core.multiarray.ndarray
+    :param target_classes: (b_size, num_classes) | binary indication of classes
+    :type target_classes: numpy.core.multiarray.ndarray
+    :param total_classes: total amount of classes
+    :type total_classes: int
+    :return:
+    :rtype:
+    """
+    b_size = batch_array.shape[0]
+    zeros_size = (b_size, total_classes)
+    max_means = np.zeros(zeros_size)
+    s_i_indices = np.zeros(zeros_size)
+    active_classes = np.zeros(zeros_size)
+
+    for b_i in range(target_classes.shape[0]):
+        for active_class in target_classes[b_i]:
+            if active_class != -1:
+                active_classes[b_i, active_class] = 1
+
+    for b_index in range(b_size):
+
+        for class_index in range(total_classes):
+
+            class_array = np.copy(batch_array[b_index, :, class_index])
+
+            tmp_max_means = np.zeros(len(s))
+            s_i_indices_tmp = np.zeros(len(s))
+
+            for s_i in range(len(s)):
+                local_array = class_array * s[s_i, :]
+                tmp_max_means[s_i] = local_array.mean()
+                s_i_indices_tmp[s_i] = s_i
+
+            max_index = np.argmax(tmp_max_means)
+            max_means[b_index, class_index] = tmp_max_means[max_index]
+            s_i_indices[b_index, class_index] = s_i_indices_tmp[max_index]
+
+    return max_means, s_i_indices
+
+
+@numba.jit(nopython=True, nogil=True)
+def find_max_mean_validation(batch_array, s, total_classes):
+    """
+
+    :param batch_array: (b_size, t_steps, num_classes)
+    :type batch_array: numpy.core.multiarray.ndarray
+    :param s: shape (X, t_steps)
+    :type s: numpy.core.multiarray.ndarray
+    :param target_classes: (b_size, num_classes) | binary indication of classes
+    :type target_classes: numpy.core.multiarray.ndarray
+    :param total_classes: total amount of classes
+    :type total_classes: int
+    :return:
+    :rtype:
+    """
+    b_size = batch_array.shape[0]
+    zeros_size = (b_size, total_classes)
+    max_means = np.zeros(zeros_size)
+    s_i_indices = np.zeros(zeros_size)
+
+    for b_index in range(b_size):
+
+        for class_index in range(total_classes):
+
+            class_array = np.copy(batch_array[b_index, :, class_index])
+
+            tmp_max_means = np.zeros(len(s))
+            s_i_indices_tmp = np.zeros(len(s))
+
+            for s_i in range(len(s)):
+                local_array = class_array * s[s_i, :]
+                tmp_max_means[s_i] = local_array.mean()
+                s_i_indices_tmp[s_i] = s_i
+
+            max_index = np.argmax(tmp_max_means)
+            max_means[b_index, class_index] = tmp_max_means[max_index]
+            s_i_indices[b_index, class_index] = s_i_indices_tmp[max_index]
+
+    return max_means, s_i_indices
 
 
 def main():

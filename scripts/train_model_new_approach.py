@@ -55,7 +55,9 @@ def main():
         torch.has_cudnn = False
 
     config = importlib.import_module(args.config_file)
-    output_config(config)
+
+    if not args.debug:
+        output_config(config)
 
     # The alarm branch layers
     network = Model(
@@ -94,7 +96,7 @@ def main():
         network = network.cuda()
 
     # Create optimizer for all parameters
-    optim = config.optimizer(network.parameters(), lr=config.optimizer_lr)  #, weight_decay=1e-6)
+    optim = config.optimizer(network.parameters(), **config.optimizer_dict)
 
     if not os.path.exists(config.dataset_local_path):
         print('Copying dataset')
@@ -204,6 +206,15 @@ def train_loop(config, network, train_data, valid_data, scaler,
     total_iterations = 0
     s = get_s_2(config.rnn_time_steps_out)
 
+    if config.find_max_mean_formulation == 1:
+        find_mean = find_max_mean_original
+    elif config.find_max_mean_formulation == 2:
+        find_mean = find_max_mean_2
+    elif config.find_max_mean_formulation == 3:
+        find_mean = find_max_mean_3
+    else:
+        find_mean = find_max_mean_original
+
     for epoch in range(config.epochs):
         network.train()
         losses = []
@@ -234,7 +245,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 tmp_v = network_output.data.numpy()
                 tmp_classes = y_categorical.data.numpy()
 
-            max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(
+            max_means, s_i_inds = find_mean(
                 tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
 
             mult_result = torch.autograd.Variable(
@@ -251,7 +262,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
                     else:
                         s_tmp = torch.autograd.Variable(torch.from_numpy(
                             s[int(s_i_inds[b_i, c_i]), :]
-                        ).float())
+                        ).float(), requires_grad=False)
                         if torch.has_cudnn:
                             s_tmp = s_tmp.cuda()
                         mult_result[b_i, :, c_i] = network_output[b_i, :, c_i] * s_tmp
@@ -260,15 +271,11 @@ def train_loop(config, network, train_data, valid_data, scaler,
                 mlp_output * mult_result.mean(1).squeeze()
             )
 
-            # print(mult_result.mean(1).squeeze())
-            # print('*' * 50)
-            # print(final_output)
-            # print('-'*50)
-
             # Calculate losses, do backward passing, and do updates
             loss = loss_new_model(
                 final_output, y_categorical,
-                config.network_loss_weight, config.batch_size, config.weighting_factor
+                config.network_loss_weight, config.batch_size, config.weighting_factor,
+                len(alarm_classes) + len(vehicle_classes)
             )
 
             reg_loss_l1 = 0

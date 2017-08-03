@@ -258,7 +258,7 @@ def loss_one_hot_single(y_pred, y_true, use_weights):
     )
 
 
-def loss_new_model(y_pred, y_true, use_weights, total_examples, weight_factor):
+def loss_new_model(y_pred, y_true, use_weights, total_examples, weight_factor, total_classes):
 
     def loss_positive(y_pred_inner, the_class_weight):
         target_val = Variable(torch.ones((1,)))
@@ -295,20 +295,17 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples, weight_factor):
     total_additions = 0
 
     for b in range(y_pred.size()[0]):
-        for c_target in range(y_true.size()[1]):
-            target_class = y_true[b, c_target].data[0]
-            if target_class > -1:
-                for c in range(y_pred.size()[1]):
-                    w = weights[target_class:target_class+1]
-                    y = y_pred[b, c]
-                    if c != target_class:
-                        loss += loss_negative(y, w)
-                    else:
-                        loss += loss_positive(y, w)
-                    total_additions += 1
+        for c_target in range(total_classes):
+            y = y_pred[b, c_target]
+            w = weights[c_target:c_target + 1]
+            if c_target in y_true:
+                loss += loss_positive(y, w)
+            else:
+                loss += loss_negative(y, w)
+            total_additions += 1
 
-    return loss/total_examples
-    # return loss/total_additions
+    # return loss/total_examples
+    return loss/total_additions
 
 
 def validate(valid_data, common_feature_extractor, branch_alarm, branch_vehicle,
@@ -660,38 +657,42 @@ def validate_single_new_model(valid_data, network, scaler, logger, total_iterati
 
         if torch.has_cudnn:
             tmp_v = output.cpu().data.numpy()
-            tmp_classes = y_categorical.cpu().data.numpy()
         else:
             tmp_v = output.data.numpy()
-            tmp_classes = y_categorical.data.numpy()
 
-        #max_means, s_i_inds, max_means_index_end, max_means_index_end = find_max_mean(
-        #    tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
+        max_means, s_i_inds = find_max_mean_validation(
+            tmp_v, s, len(vehicle_classes) + len(alarm_classes))
 
-        # mult_result = torch.autograd.Variable(torch.zeros(output.size()))
+        mult_result = torch.autograd.Variable(
+            torch.zeros(output.size()),
+        )
 
-        # if torch.has_cudnn:
-        #    mult_result = mult_result.cuda()
+        if torch.has_cudnn:
+            mult_result = mult_result.cuda()
 
-        # for b_i in range(s_i_inds.shape[0]):
-        #    for c_i in range(s_i_inds.shape[1]):
-        #        if s_i_inds[b_i, c_i] == -1:
-        #            mult_result[b_i, :, c_i] = -1 * output[b_i, :, c_i]
-        #        else:
-        #            s_tmp = torch.autograd.Variable(torch.from_numpy(
-        #                s[int(s_i_inds[b_i, c_i]), :]
-        #            ).float())
-        #            if torch.has_cudnn:
-        #                s_tmp = s_tmp.cuda()
-        #            mult_result[b_i, :, c_i] = output[b_i, :, c_i] * s_tmp
+        for b_i in range(s_i_inds.shape[0]):
+            for c_i in range(s_i_inds.shape[1]):
+                if s_i_inds[b_i, c_i] == -1:
+                    mult_result[b_i, :, c_i] = -1 * output[b_i, :, c_i]
+                else:
+                    s_tmp = torch.autograd.Variable(torch.from_numpy(
+                        s[int(s_i_inds[b_i, c_i]), :]
+                    ).float(), requires_grad=False)
+                    if torch.has_cudnn:
+                        s_tmp = s_tmp.cuda()
+                    mult_result[b_i, :, c_i] = output[b_i, :, c_i] * s_tmp
 
-        final_output = torch.nn.functional.sigmoid(mlp_output * output.mean(1))
+        final_output = torch.nn.functional.sigmoid(mlp_output * mult_result.mean(1).squeeze())
 
         # Calculate losses, do backward passing, and do updates
         loss_tmp = loss_new_model(
             final_output, y_categorical,
             config.network_loss_weight,
-            config.batch_size, config.weighting_factor)
+            config.batch_size, config.weighting_factor,
+            len(alarm_classes) + len(vehicle_classes)
+        )
+
+        final_output = final_output.gt(0.5).float()
 
         if torch.has_cudnn:
             loss_tmp = loss_tmp.cpu()

@@ -20,9 +20,9 @@ dataset_local_path = '/Tmp/drososko/dcase_2017_task_4_test.hdf5'
 
 use_scaler = True
 network_loss_weight = True
-# weighting_factor = class_freqs_vehicle[2]
-weighting_factor = None
-find_max_mean_formulation = 2
+weighting_factor = class_freqs_vehicle[2]
+# weighting_factor = None
+find_max_mean_formulation = 4
 
 # Optimizer parameters
 grad_clip_norm = 0.

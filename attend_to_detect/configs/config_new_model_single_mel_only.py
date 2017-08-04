@@ -20,9 +20,9 @@ dataset_local_path = '/Tmp/drososko/dcase_2017_task_4_test.hdf5'
 
 use_scaler = True
 network_loss_weight = True
-weighting_factor = class_freqs_vehicle[2]
-# weighting_factor = 50000
-find_max_mean_formulation = 3
+# weighting_factor = class_freqs_vehicle[2]
+weighting_factor = None
+find_max_mean_formulation = 2
 
 # Optimizer parameters
 grad_clip_norm = 0.
@@ -30,16 +30,16 @@ grad_clip_norm = 0.
 # optimizer_dict = {
 #     'lr': 1e-5
 # }
-optimizer = Adam
-optimizer_dict = {
-    'lr': 1e-4
-}
-# optimizer = SGD
+# optimizer = Adam
 # optimizer_dict = {
-#     'lr': 1e-5,
-#     'momentum': 0.9,
-#     'nesterov': True
+#     'lr': 1e-4
 # }
+optimizer = SGD
+optimizer_dict = {
+    'lr': 1e-5,
+    'momentum': 0.9,
+    'nesterov': True
+}
 
 lr_factor = .95
 l1_factor = 0.

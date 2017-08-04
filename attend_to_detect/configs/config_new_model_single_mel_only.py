@@ -30,16 +30,16 @@ grad_clip_norm = 0.
 # optimizer_dict = {
 #     'lr': 1e-5
 # }
-optimizer = Adam
-optimizer_dict = {
-    'lr': 1e-4
-}
-# optimizer = SGD
+# optimizer = Adam
 # optimizer_dict = {
-#     'lr': 1e-5,
-#     'momentum': 0.9,
-#     'nesterov': True
+#     'lr': 1e-4
 # }
+optimizer = SGD
+optimizer_dict = {
+    'lr': 1e-5,
+    'momentum': 0.9,
+    'nesterov': True
+}
 
 lr_factor = .95
 l1_factor = 0.

@@ -257,7 +257,7 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             for b_i in range(s_i_inds.shape[0]):
                 for c_i in range(s_i_inds.shape[1]):
-                    if s_i_inds[b_i, c_i] == -1:
+                    if s_i_inds[b_i, c_i] == -1 and config.find_max_mean_formulation == 1:
                         mult_result[b_i, :, c_i] = -1 * network_output[b_i, :, c_i]
                     else:
                         s_tmp = torch.autograd.Variable(torch.from_numpy(

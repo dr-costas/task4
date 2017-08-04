@@ -13,15 +13,15 @@ all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 # General variables
 batch_size = 64
 epochs = 300
-lr_iterations = 400
+lr_iterations = 800
 
 dataset_full_path = '/data/lisatmp4/santosjf/task4/attend_to_detect/create_dataset/dcase_2017_task_4_test.hdf5'
 dataset_local_path = '/Tmp/drososko/dcase_2017_task_4_test.hdf5'
 
 use_scaler = True
 network_loss_weight = True
-weighting_factor = class_freqs_vehicle[2]
-# weighting_factor = None
+# weighting_factor = class_freqs_vehicle[2]
+weighting_factor = 64 * 800
 find_max_mean_formulation = 4
 
 # Optimizer parameters
@@ -38,7 +38,8 @@ optimizer = SGD
 optimizer_dict = {
     'lr': 1e-5,
     'momentum': 0.9,
-    'nesterov': True
+    'nesterov': True,
+    'weight_decay': 1e-4
 }
 
 lr_factor = .95
@@ -61,7 +62,7 @@ nb_features = 64
 #
 
 # MEL only 2
-network_channels_out = [128, 128, 128, 128, 128]
+network_channels_out = [256, 256, 256, 256, 256]
 network_cnn_kernel_sizes = [(3, 3)] * len(network_channels_out)
 network_cnn_strides = [(2, 2)] * len(network_channels_out)
 network_cnn_paddings = [(1, 1)] * len(network_channels_out)
@@ -86,7 +87,7 @@ rnn_time_steps_out = 14
 # rnn_time_steps_out = 14
 
 network_rnn_input_size = 128
-network_rnn_output_dims = [128, 128]  #, 256]
+network_rnn_output_dims = [256, 256]  #, 256]
 
 network_rnn_activations = [functional.tanh]
 
@@ -113,7 +114,7 @@ network_rnn_subsamplings = [1]
 #
 # network_rnn_subsamplings = [1]
 
-mlp_dims = [128, 64, len(all_freqs_vehicles_first)]
+mlp_dims = [256, 128, len(all_freqs_vehicles_first)]
 mlp_activations = [functional.tanh, functional.tanh, functional.tanh]
 mlp_dropouts = [0.5]
 

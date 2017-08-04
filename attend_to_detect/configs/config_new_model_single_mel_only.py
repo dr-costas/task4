@@ -86,7 +86,7 @@ rnn_time_steps_out = 14
 # network_pool_paddings = [(1, 1)] * 3
 # rnn_time_steps_out = 14
 
-network_rnn_input_size = 128
+network_rnn_input_size = 256
 network_rnn_output_dims = [256, 256]  #, 256]
 
 network_rnn_activations = [functional.tanh]

@@ -278,7 +278,7 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples, weight_factor, t
             weight=the_class_weight, size_average=False
         )
 
-    if use_weights:
+    if use_weights and weight_factor is not None:
         local_weights_positive = [weight_factor / a for a in all_freqs_vehicles_first]
         weights = torch.from_numpy(np.array(local_weights_positive)).float()
     else:

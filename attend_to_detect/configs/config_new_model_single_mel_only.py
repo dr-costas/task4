@@ -11,7 +11,7 @@ all_freqs_alarms_first = class_freqs_alarm + class_freqs_vehicle
 all_freqs_vehicles_first = class_freqs_vehicle + class_freqs_alarm
 
 # General variables
-batch_size = 128
+batch_size = 64
 epochs = 300
 lr_iterations = 400
 
@@ -61,7 +61,7 @@ nb_features = 64
 #
 
 # MEL only 2
-network_channels_out = [64, 64, 64, 64, 64]
+network_channels_out = [128, 128, 128, 128, 128]
 network_cnn_kernel_sizes = [(3, 3)] * len(network_channels_out)
 network_cnn_strides = [(2, 2)] * len(network_channels_out)
 network_cnn_paddings = [(1, 1)] * len(network_channels_out)
@@ -85,8 +85,8 @@ rnn_time_steps_out = 14
 # network_pool_paddings = [(1, 1)] * 3
 # rnn_time_steps_out = 14
 
-network_rnn_input_size = 64
-network_rnn_output_dims = [64, 64]  #, 256]
+network_rnn_input_size = 128
+network_rnn_output_dims = [128, 128]  #, 256]
 
 network_rnn_activations = [functional.tanh]
 
@@ -113,8 +113,8 @@ network_rnn_subsamplings = [1]
 #
 # network_rnn_subsamplings = [1]
 
-mlp_dims = [len(all_freqs_vehicles_first)]
-mlp_activations = [functional.sigmoid]
+mlp_dims = [128, 64, len(all_freqs_vehicles_first)]
+mlp_activations = [functional.tanh, functional.tanh, functional.sigmoid]
 mlp_dropouts = [0.5]
 
 last_rnn_dim = len(all_freqs_vehicles_first)

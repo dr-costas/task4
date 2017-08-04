@@ -297,7 +297,10 @@ def loss_new_model(y_pred, y_true, use_weights, total_examples, weight_factor, t
     for b in range(y_pred.size()[0]):
         for c_target in range(total_classes):
             y = y_pred[b, c_target]
-            w = weights[c_target:c_target + 1]
+            if weights is not None:
+                w = weights[c_target:c_target + 1]
+            else:
+                w = None
             if c_target in y_true:
                 loss += loss_positive(y, w)
             else:

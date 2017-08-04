@@ -238,38 +238,43 @@ def train_loop(config, network, train_data, valid_data, scaler,
 
             network_output, mlp_output = network(x[:, :, :, :config.nb_features])
 
-            if torch.has_cudnn:
-                tmp_v = network_output.cpu().data.numpy()
-                tmp_classes = y_categorical.cpu().data.numpy()
+            if config.find_max_mean_formulation < 4:
+                if torch.has_cudnn:
+                    tmp_v = network_output.cpu().data.numpy()
+                    tmp_classes = y_categorical.cpu().data.numpy()
+                else:
+                    tmp_v = network_output.data.numpy()
+                    tmp_classes = y_categorical.data.numpy()
+
+                max_means, s_i_inds = find_mean(
+                    tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
+
+                mult_result = torch.autograd.Variable(
+                    torch.zeros(network_output.size()),
+                )
+
+                if torch.has_cudnn:
+                    mult_result = mult_result.cuda()
+
+                for b_i in range(s_i_inds.shape[0]):
+                    for c_i in range(s_i_inds.shape[1]):
+                        if s_i_inds[b_i, c_i] == -1 and config.find_max_mean_formulation == 1:
+                            mult_result[b_i, :, c_i] = -1 * network_output[b_i, :, c_i]
+                        else:
+                            s_tmp = torch.autograd.Variable(torch.from_numpy(
+                                s[int(s_i_inds[b_i, c_i]), :]
+                            ).float(), requires_grad=False)
+                            if torch.has_cudnn:
+                                s_tmp = s_tmp.cuda()
+                            mult_result[b_i, :, c_i] = network_output[b_i, :, c_i] * s_tmp
+
+                final_output = functional.sigmoid(
+                    mlp_output * mult_result.mean(1).squeeze()
+                )
             else:
-                tmp_v = network_output.data.numpy()
-                tmp_classes = y_categorical.data.numpy()
-
-            max_means, s_i_inds = find_mean(
-                tmp_v, tmp_classes, s, len(vehicle_classes) + len(alarm_classes))
-
-            mult_result = torch.autograd.Variable(
-                torch.zeros(network_output.size()),
-            )
-
-            if torch.has_cudnn:
-                mult_result = mult_result.cuda()
-
-            for b_i in range(s_i_inds.shape[0]):
-                for c_i in range(s_i_inds.shape[1]):
-                    if s_i_inds[b_i, c_i] == -1 and config.find_max_mean_formulation == 1:
-                        mult_result[b_i, :, c_i] = -1 * network_output[b_i, :, c_i]
-                    else:
-                        s_tmp = torch.autograd.Variable(torch.from_numpy(
-                            s[int(s_i_inds[b_i, c_i]), :]
-                        ).float(), requires_grad=False)
-                        if torch.has_cudnn:
-                            s_tmp = s_tmp.cuda()
-                        mult_result[b_i, :, c_i] = network_output[b_i, :, c_i] * s_tmp
-
-            final_output = functional.sigmoid(
-                mlp_output * mult_result.mean(1).squeeze()
-            )
+                final_output = functional.sigmoid(
+                    mlp_output * network_output.mean(1).squeeze()
+                )
 
             # Calculate losses, do backward passing, and do updates
             loss = loss_new_model(

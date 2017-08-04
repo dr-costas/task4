@@ -22,7 +22,7 @@ use_scaler = True
 network_loss_weight = True
 # weighting_factor = class_freqs_vehicle[2]
 weighting_factor = 64 * 800
-find_max_mean_formulation = 4
+find_max_mean_formulation = 2
 
 # Optimizer parameters
 grad_clip_norm = 0.

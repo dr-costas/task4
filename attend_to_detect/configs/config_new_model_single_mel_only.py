@@ -115,7 +115,7 @@ network_rnn_subsamplings = [1]
 # network_rnn_subsamplings = [1]
 
 mlp_dims = [256, 128, len(all_freqs_vehicles_first)]
-mlp_activations = [functional.tanh, functional.tanh, functional.tanh]
+mlp_activations = [functional.tanh, functional.tanh, functional.sigmoid]
 mlp_dropouts = [0.5]
 
 last_rnn_dim = len(all_freqs_vehicles_first)
